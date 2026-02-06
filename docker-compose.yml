@@ -1,0 +1,24 @@
+services:
+  app:
+    build: .
+    container_name: whatsapp-bot-platform
+    restart: unless-stopped
+    ports:
+      - "3001:3001"
+    volumes:
+      - ./web-bot_sessions:/app/web-bot_sessions
+      - ./data:/app/data
+      - ./backend/data:/app/backend/data
+    env_file:
+      - .env
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

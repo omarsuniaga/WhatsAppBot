@@ -1,0 +1,62 @@
+# Node.js
+node_modules/
+web/node_modules/
+npm-debug.log*
+
+# Build outputs (se generan en el builder stage)
+lib/
+dist/
+web/dist/
+*.tsbuildinfo
+
+# Development
+.git/
+.gitignore
+.claude/
+.gemini/
+.vscode/
+.idea/
+
+# Environment y secrets
+.env
+.env.*
+
+# Runtime data (montar como volúmenes)
+web-bot_sessions/
+data/
+backend/data/
+logs/
+uploads/
+
+# Testing
+coverage/
+.nyc_output
+tests/
+*.test.ts
+*.spec.ts
+
+# Cache
+.npm
+.eslintcache
+.cache
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+Dockerfile*
+docker-compose*
+.dockerignore
+
+# Certificates
+*.pem
+*.key
+*.crt
+secrets/
+ssl/
+
+# Monitoring (no existe aún)
+monitoring/
+prometheus/
+grafana/

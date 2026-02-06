@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "states": {
+    "120363044349593574@g.us": {
+      "jid": "120363044349593574@g.us",
+      "lastReadTimestamp": 1769577647,
+      "updatedAt": "2026-01-28T05:20:47.385Z"
+    },
+    "120363211756992147@g.us": {
+      "jid": "120363211756992147@g.us",
+      "lastReadTimestamp": 1769577305,
+      "updatedAt": "2026-01-28T05:15:05.190Z"
+    },
+    "18097633363@s.whatsapp.net": {
+      "jid": "18097633363@s.whatsapp.net",
+      "lastReadTimestamp": 1769577625,
+      "updatedAt": "2026-01-28T05:20:25.580Z"
+    }
+  }
+}

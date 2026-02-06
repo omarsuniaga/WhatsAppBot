@@ -1,0 +1,190 @@
+{
+  "version": 1,
+  "lastUpdated": "2026-01-26T22:32:17.880Z",
+  "config": {
+    "minConfidenceToRespond": 0.85,
+    "minConfidenceToConfirm": 0.5,
+    "maxContextMessages": 10,
+    "enableSemanticSearch": true,
+    "enableAutoLearn": true,
+    "responseLanguage": "es",
+    "businessName": "El Sistema Punta Cana",
+    "businessDescription": "Somos el bot del sistema pc",
+    "toneStyle": "professional"
+  },
+  "categories": [
+    {
+      "id": "general",
+      "name": "General",
+      "description": "Preguntas generales",
+      "order": 1,
+      "isActive": true
+    },
+    {
+      "id": "horarios",
+      "name": "Horarios",
+      "description": "Horarios de atencion",
+      "order": 2,
+      "isActive": true
+    },
+    {
+      "id": "contacto",
+      "name": "Contacto",
+      "description": "Informacion de contacto",
+      "order": 3,
+      "isActive": true
+    },
+    {
+      "id": "servicios",
+      "name": "Servicios",
+      "description": "Productos y servicios",
+      "order": 4,
+      "isActive": true
+    },
+    {
+      "id": "pagos",
+      "name": "Pagos",
+      "description": "Precios y metodos de pago",
+      "order": 5,
+      "isActive": true
+    }
+  ],
+  "faqs": [
+    {
+      "id": "faq-001",
+      "category": "horarios",
+      "questions": [
+        "Cual es su horario?",
+        "A que hora abren?",
+        "Estan abiertos los domingos?",
+        "Hasta que hora atienden?"
+      ],
+      "answer": "Nuestro horario de atencion es de Lunes a Viernes de 8:00 AM a 6:00 PM, y Sabados de 9:00 AM a 2:00 PM. Los domingos permanecemos cerrados.",
+      "keywords": [
+        "horario",
+        "hora",
+        "abierto",
+        "cerrado",
+        "atienden"
+      ],
+      "confidence": 1,
+      "usageCount": 0,
+      "approved": true,
+      "createdBy": "admin",
+      "createdAt": "2026-01-26T00:00:00Z",
+      "updatedAt": "2026-01-26T00:00:00Z"
+    },
+    {
+      "id": "faq-002",
+      "category": "contacto",
+      "questions": [
+        "Como los puedo contactar?",
+        "Cual es su telefono?",
+        "Tienen email?",
+        "Donde estan ubicados?"
+      ],
+      "answer": "Puedes contactarnos por WhatsApp en este mismo numero. Tambien puedes escribirnos a nuestro email: contacto@minegocio.com",
+      "keywords": [
+        "contacto",
+        "telefono",
+        "email",
+        "ubicacion"
+      ],
+      "confidence": 1,
+      "usageCount": 0,
+      "approved": true,
+      "createdBy": "admin",
+      "createdAt": "2026-01-26T00:00:00Z",
+      "updatedAt": "2026-01-26T00:00:00Z"
+    },
+    {
+      "id": "faq-003",
+      "category": "servicios",
+      "questions": [
+        "Que servicios ofrecen?",
+        "Que productos tienen?",
+        "A que se dedican?"
+      ],
+      "answer": "Ofrecemos una variedad de servicios y productos de alta calidad. Para conocer nuestro catalogo completo, por favor visitenos o pregunte por algun servicio especifico.",
+      "keywords": [
+        "servicio",
+        "producto",
+        "ofrecen",
+        "venden"
+      ],
+      "confidence": 1,
+      "usageCount": 0,
+      "approved": true,
+      "createdBy": "admin",
+      "createdAt": "2026-01-26T00:00:00Z",
+      "updatedAt": "2026-01-26T00:00:00Z"
+    },
+    {
+      "id": "faq-004",
+      "category": "pagos",
+      "questions": [
+        "Cuanto cuesta?",
+        "Que metodos de pago aceptan?",
+        "Aceptan tarjeta?"
+      ],
+      "answer": "Los precios varian segun el servicio o producto. Aceptamos efectivo, tarjetas de credito/debito y transferencias bancarias. Consultanos por el producto especifico que te interesa.",
+      "keywords": [
+        "precio",
+        "costo",
+        "pago",
+        "tarjeta"
+      ],
+      "confidence": 1,
+      "usageCount": 0,
+      "approved": true,
+      "createdBy": "admin",
+      "createdAt": "2026-01-26T00:00:00Z",
+      "updatedAt": "2026-01-26T00:00:00Z"
+    },
+    {
+      "id": "faq-005",
+      "category": "general",
+      "questions": [
+        "Hola",
+        "Buenos dias",
+        "Buenas tardes",
+        "Buenas noches"
+      ],
+      "answer": "Hola! Bienvenido a Mi Negocio. En que puedo ayudarte hoy?",
+      "keywords": [
+        "hola",
+        "buenos",
+        "buenas",
+        "saludos"
+      ],
+      "confidence": 1,
+      "usageCount": 0,
+      "approved": true,
+      "createdBy": "admin",
+      "createdAt": "2026-01-26T00:00:00Z",
+      "updatedAt": "2026-01-26T00:00:00Z"
+    },
+    {
+      "id": "faq-006",
+      "category": "general",
+      "questions": [
+        "Gracias",
+        "Adios",
+        "Hasta luego",
+        "Chao"
+      ],
+      "answer": "Gracias por contactarnos! Fue un placer atenderte. Si tienes mas preguntas, no dudes en escribirnos. Que tengas un excelente dia!",
+      "keywords": [
+        "gracias",
+        "adios",
+        "chao"
+      ],
+      "confidence": 1,
+      "usageCount": 0,
+      "approved": true,
+      "createdBy": "admin",
+      "createdAt": "2026-01-26T00:00:00Z",
+      "updatedAt": "2026-01-26T00:00:00Z"
+    }
+  ]
+}

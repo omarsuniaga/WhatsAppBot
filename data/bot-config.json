@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "enabled": true,
+  "geminiApiKey": "AIzaSyDHVpCzsXxxlmB-s7ILDy8AyeWd0Si2UX0",
+  "activeChats": [
+    "18097176627@s.whatsapp.net"
+  ],
+  "settings": {
+    "minConfidenceForQA": 0.7,
+    "useGeminiFallback": true,
+    "typingIndicator": true,
+    "typingDelayMs": 1500,
+    "maxHistoryMessages": 10
+  },
+  "stats": {
+    "totalQueries": 7,
+    "qaMatches": 0,
+    "geminiResponses": 0,
+    "noMatches": 0,
+    "lastUpdated": "2026-02-06T02:34:05.904Z"
+  }
+}

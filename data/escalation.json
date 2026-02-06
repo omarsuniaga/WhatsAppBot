@@ -1,0 +1,50 @@
+{
+  "version": 1,
+  "config": {
+    "enabled": true,
+    "defaultPriority": "medium",
+    "autoAssign": true,
+    "reminderIntervalMinutes": 15,
+    "maxReminderCount": 3,
+    "escalateToSuperAfterMinutes": 60,
+    "waitingMessage": "Gracias por tu mensaje. Tu consulta está siendo procesada y un agente te responderá pronto. 🙏",
+    "assignedMessage": "Tu solicitud ha sido asignada a uno de nuestros agentes. Te responderemos en breve.",
+    "resolvedMessage": "¡Gracias por contactarnos! Si tienes más preguntas, no dudes en escribirnos.",
+    "outOfHoursMessage": "Gracias por tu mensaje. Nuestro horario de atención es de Lunes a Viernes, 9:00 AM - 6:00 PM. Te responderemos en cuanto estemos disponibles.",
+    "urgentKeywords": [
+      "urgente",
+      "emergencia",
+      "inmediato",
+      "ayuda",
+      "problema grave",
+      "no funciona"
+    ],
+    "negativeKeywords": [
+      "molesto",
+      "enojado",
+      "frustrado",
+      "terrible",
+      "pésimo",
+      "queja",
+      "reclamo"
+    ],
+    "reminderInterval": 15,
+    "maxTicketsPerAdmin": 10
+  },
+  "admins": [
+    {
+      "jid": "18097176627@s.whatsapp.net",
+      "name": "El Sistema PC",
+      "role": "super_admin",
+      "notifyOnNewTicket": true,
+      "notifyOnUrgent": true,
+      "isActive": true,
+      "notifyOnReminder": true,
+      "maxConcurrentTickets": 10,
+      "categories": []
+    }
+  ],
+  "tickets": [],
+  "notifications": [],
+  "lastUpdated": "2026-01-26T22:32:17.904Z"
+}

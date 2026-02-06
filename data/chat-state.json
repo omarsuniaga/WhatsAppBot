@@ -1,0 +1,65 @@
+{
+  "version": 1,
+  "states": {
+    "120363044349593574@group": {
+      "unreadCount": 12,
+      "lastMessageAt": 1769701823,
+      "lastReadAt": 1769577647,
+      "displayName": "Rafael Cabrera",
+      "updatedAt": "2026-01-29T15:50:23.462Z"
+    },
+    "120363211756992147@group": {
+      "unreadCount": 0,
+      "lastMessageAt": 1769576285,
+      "lastReadAt": 1769577305,
+      "displayName": "Xue Zheng Rent a House",
+      "updatedAt": "2026-01-28T05:15:05.189Z"
+    },
+    "176012239323262@contact": {
+      "unreadCount": 9,
+      "lastMessageAt": 1769536616,
+      "lastReadAt": null,
+      "displayName": "Omar Suniaga",
+      "updatedAt": "2026-01-27T17:56:56.084Z"
+    },
+    "18097176627@contact": {
+      "unreadCount": 12,
+      "lastMessageAt": 1769709130,
+      "lastReadAt": null,
+      "displayName": "Omar Suniaga",
+      "updatedAt": "2026-01-29T17:52:10.557Z"
+    },
+    "18097633363@contact": {
+      "unreadCount": 0,
+      "lastMessageAt": 1769535929,
+      "lastReadAt": 1769577625,
+      "displayName": "Flavio DL",
+      "updatedAt": "2026-01-28T05:20:25.580Z"
+    },
+    "18299598584@contact": {
+      "unreadCount": 1,
+      "lastMessageAt": {
+        "low": 1769637728,
+        "high": 0,
+        "unsigned": true
+      },
+      "lastReadAt": null,
+      "displayName": null,
+      "updatedAt": "2026-01-29T15:00:25.285Z"
+    },
+    "223218073915618@contact": {
+      "unreadCount": 2,
+      "lastMessageAt": 1769698862,
+      "lastReadAt": null,
+      "displayName": "alex",
+      "updatedAt": "2026-01-29T15:01:02.359Z"
+    },
+    "5491155664558-1586195154@group": {
+      "unreadCount": 3,
+      "lastMessageAt": 1769698862,
+      "lastReadAt": null,
+      "displayName": "Thamy",
+      "updatedAt": "2026-01-29T15:01:02.951Z"
+    }
+  }
+}

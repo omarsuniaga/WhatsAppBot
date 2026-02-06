@@ -30,18 +30,20 @@ export const sendText = async (req: Request, res: Response): Promise<void> => {
 
 export const sendMedia = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { number, mediaUrl, caption } = req.body;
+        const { number, caption } = req.body;
+        // Priority: uploaded file > mediaUrl in body
+        const mediaPath = req.file?.path || req.body.mediaUrl;
 
-        if (!number || !mediaUrl) {
+        if (!number || !mediaPath) {
             res.status(400).json({
                 success: false,
-                error: 'number and mediaUrl are required'
+                error: 'number and media (file or mediaUrl) are required'
             });
             return;
         }
 
         const botService = BotService.getInstance();
-        const result = await botService.sendMedia(number, mediaUrl, caption || '');
+        const result = await botService.sendMedia(number, mediaPath, caption || '');
 
         res.json({
             success: true,
@@ -57,18 +59,49 @@ export const sendMedia = async (req: Request, res: Response): Promise<void> => {
 
 export const sendFile = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { number, fileUrl } = req.body;
+        const { number } = req.body;
+        // Priority: uploaded file > fileUrl in body
+        const filePath = req.file?.path || req.body.fileUrl;
 
-        if (!number || !fileUrl) {
+        if (!number || !filePath) {
             res.status(400).json({
                 success: false,
-                error: 'number and fileUrl are required'
+                error: 'number and file (file or fileUrl) are required'
             });
             return;
         }
 
         const botService = BotService.getInstance();
-        const result = await botService.sendFile(number, fileUrl);
+        const result = await botService.sendFile(number, filePath);
+
+        res.json({
+            success: true,
+            data: result
+        });
+    } catch (error: any) {
+        res.status(500).json({
+            success: false,
+            error: error.message
+        });
+    }
+};
+
+export const sendAudio = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { number } = req.body;
+        // Priority: uploaded file > audioUrl in body
+        const audioPath = req.file?.path || req.body.audioUrl;
+
+        if (!number || !audioPath) {
+            res.status(400).json({
+                success: false,
+                error: 'number and audio (file or audioUrl) are required'
+            });
+            return;
+        }
+
+        const botService = BotService.getInstance();
+        const result = await botService.sendAudio(number, audioPath);
 
         res.json({
             success: true,

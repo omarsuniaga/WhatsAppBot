@@ -3,14 +3,26 @@ import * as statusController from '../controllers/statusController';
 import * as messageController from '../controllers/messageController';
 import * as chatController from '../controllers/chatController';
 import * as aiController from '../controllers/aiController';
+import * as contactController from '../controllers/contactController';
 import * as contactGroupController from '../controllers/contactGroupController';
 import * as whatsappGroupController from '../controllers/whatsappGroupController';
 import * as botController from '../controllers/botController';
+import * as knowledgeController from '../controllers/knowledgeController';
+import * as escalationController from '../controllers/escalationController';
+import * as broadcastController from '../controllers/broadcastController';
+import * as alertController from '../controllers/alertController';
+import * as botAssignmentController from '../controllers/botAssignmentController';
+import * as learningController from '../controllers/learningController';
+import * as triggerController from '../controllers/triggerController';
 import { checkRateLimit, conditionalRateLimit } from '../middlewares/rateLimitMiddleware';
 import RateLimitService from '../services/rateLimitService';
 import MessageQueueService from '../services/messageQueueService';
+import institutionalRoutes from './institutional';
+import { adminRoutes } from '../../../backend/src/routes';
 
 const router = Router();
+
+import { upload } from '../middlewares/uploadMiddleware';
 
 // ==========================================
 // Status routes
@@ -23,20 +35,32 @@ router.post('/auth/logout', statusController.logout);
 // Chat routes
 // ==========================================
 router.get('/chats', chatController.getChats);
+router.get('/chats/diagnostics/visual', chatController.diagnoseChatLoadVisual);
+router.get('/chats/diagnostics/chat-load', chatController.diagnoseChatLoad);
 router.get('/chats/:jid/messages', chatController.getChatMessages);
 router.post('/chats/:jid/bot-toggle', chatController.toggleBot);
+router.post('/chats/:jid/mark-read', chatController.markAsRead);
+
+// ==========================================
+// Contact routes
+// ==========================================
+router.get('/contacts', contactController.getAllContacts);
+router.get('/contacts/search', contactController.searchContacts);
+router.get('/contacts/:jid', contactController.getContactInfo);
 
 // ==========================================
 // AI Configuration routes
 // ==========================================
+router.get('/config/ai', aiController.getAIConfig);
 router.post('/config/ai', aiController.updateAIConfig);
 
 // ==========================================
 // Message routes (with rate limiting)
 // ==========================================
 router.post('/messages/text', conditionalRateLimit, messageController.sendText);
-router.post('/messages/media', conditionalRateLimit, messageController.sendMedia);
-router.post('/messages/file', conditionalRateLimit, messageController.sendFile);
+router.post('/messages/media', conditionalRateLimit, upload.single('file'), messageController.sendMedia);
+router.post('/messages/file', conditionalRateLimit, upload.single('file'), messageController.sendFile);
+router.post('/messages/audio', conditionalRateLimit, upload.single('file'), messageController.sendAudio);
 router.post('/messages/location', conditionalRateLimit, messageController.sendLocation);
 router.post('/messages/contact', conditionalRateLimit, messageController.sendContact);
 router.post('/messages/poll', conditionalRateLimit, messageController.sendPoll);
@@ -201,5 +225,148 @@ router.delete('/bot/knowledge/category/:id', botController.deleteCategory);
 router.post('/bot/knowledge/question', botController.createQuestion);
 router.put('/bot/knowledge/question/:id', botController.updateQuestion);
 router.delete('/bot/knowledge/question/:id', botController.deleteQuestion);
+
+// ==========================================
+// Knowledge Base routes (FAQ System)
+// ==========================================
+router.get('/knowledge/config', knowledgeController.getConfig);
+router.put('/knowledge/config', knowledgeController.updateConfig);
+router.get('/knowledge/categories', knowledgeController.getCategories);
+router.post('/knowledge/categories', knowledgeController.addCategory);
+router.put('/knowledge/categories/:id', knowledgeController.updateCategory);
+router.delete('/knowledge/categories/:id', knowledgeController.deleteCategory);
+router.get('/knowledge/faqs', knowledgeController.getFaqs);
+router.get('/knowledge/faqs/:id', knowledgeController.getFaq);
+router.post('/knowledge/faqs', knowledgeController.addFaq);
+router.put('/knowledge/faqs/:id', knowledgeController.updateFaq);
+router.delete('/knowledge/faqs/:id', knowledgeController.deleteFaq);
+router.post('/knowledge/faqs/:id/approve', knowledgeController.approveFaq);
+router.get('/knowledge/search', knowledgeController.searchFaqs);
+router.post('/knowledge/learn', knowledgeController.learnFromResponse);
+router.post('/knowledge/variations', knowledgeController.generateVariations);
+router.get('/knowledge/export', knowledgeController.exportData);
+router.post('/knowledge/import', knowledgeController.importData);
+router.get('/knowledge/stats', knowledgeController.getStats);
+
+// ==========================================
+// Escalation routes (Ticket System)
+// ==========================================
+router.get('/escalation/config', escalationController.getConfig);
+router.put('/escalation/config', escalationController.updateConfig);
+router.get('/escalation/admins', escalationController.getAdmins);
+router.post('/escalation/admins', escalationController.addAdmin);
+router.put('/escalation/admins/:jid', escalationController.updateAdmin);
+router.delete('/escalation/admins/:jid', escalationController.removeAdmin);
+router.get('/escalation/tickets', escalationController.getTickets);
+router.get('/escalation/tickets/pending', escalationController.getPendingTickets);
+router.get('/escalation/tickets/:id', escalationController.getTicket);
+router.post('/escalation/tickets', escalationController.createTicket);
+router.put('/escalation/tickets/:id', escalationController.updateTicket);
+router.post('/escalation/tickets/:id/assign', escalationController.assignTicket);
+router.post('/escalation/tickets/:id/resolve', escalationController.resolveTicket);
+router.post('/escalation/tickets/:id/close', escalationController.closeTicket);
+router.post('/escalation/admin-response', escalationController.handleAdminResponse);
+router.get('/escalation/stats', escalationController.getStats);
+
+// ==========================================
+// Broadcast routes (Mass Messaging)
+// ==========================================
+router.get('/broadcast/config', broadcastController.getConfig);
+router.put('/broadcast/config', broadcastController.updateConfig);
+router.get('/broadcast/lists', broadcastController.getContactLists);
+router.get('/broadcast/lists/:id', broadcastController.getContactList);
+router.post('/broadcast/lists', broadcastController.createContactList);
+router.put('/broadcast/lists/:id', broadcastController.updateContactList);
+router.delete('/broadcast/lists/:id', broadcastController.deleteContactList);
+router.post('/broadcast/lists/:id/contacts', broadcastController.addContactToList);
+router.delete('/broadcast/lists/:id/contacts/:jid', broadcastController.removeContactFromList);
+router.post('/broadcast/lists/:id/import', broadcastController.importContacts);
+router.get('/broadcast/templates', broadcastController.getTemplates);
+router.get('/broadcast/templates/:id', broadcastController.getTemplate);
+router.post('/broadcast/templates', broadcastController.createTemplate);
+router.put('/broadcast/templates/:id', broadcastController.updateTemplate);
+router.delete('/broadcast/templates/:id', broadcastController.deleteTemplate);
+router.get('/broadcast/campaigns', broadcastController.getCampaigns);
+router.get('/broadcast/campaigns/:id', broadcastController.getCampaign);
+router.post('/broadcast/campaigns', broadcastController.createCampaign);
+router.put('/broadcast/campaigns/:id', broadcastController.updateCampaign);
+router.delete('/broadcast/campaigns/:id', broadcastController.deleteCampaign);
+router.post('/broadcast/campaigns/:id/start', broadcastController.startCampaign);
+router.post('/broadcast/campaigns/:id/pause', broadcastController.pauseCampaign);
+router.get('/broadcast/campaigns/:id/progress', broadcastController.getCampaignProgress);
+router.get('/broadcast/stats', broadcastController.getStats);
+
+// ==========================================
+// Pending Alerts routes (Smart Bot Escalations)
+// ==========================================
+router.get('/alerts', alertController.getAlerts);
+router.get('/alerts/stats', alertController.getAlertStats);
+router.get('/alerts/:id', alertController.getAlert);
+router.get('/alerts/chat/:jid', alertController.getAlertsByChat);
+router.post('/alerts/:id/respond', alertController.respondToAlert);
+router.post('/alerts/:id/dismiss', alertController.dismissAlert);
+
+// ==========================================
+// Bot Assignments routes (Per-chat bot config)
+// ==========================================
+router.get('/bot-assignments', botAssignmentController.getAll);
+router.get('/bot-assignments/default', botAssignmentController.getDefaultConfig);
+router.get('/bot-assignments/stats', botAssignmentController.getStats);
+router.get('/bot-assignments/:jid', botAssignmentController.getByJid);
+router.post('/bot-assignments', botAssignmentController.createOrUpdate);
+router.put('/bot-assignments/default', botAssignmentController.updateDefaultConfig);
+router.put('/bot-assignments/:jid', botAssignmentController.update);
+router.post('/bot-assignments/:jid/toggle', botAssignmentController.toggleBot);
+router.delete('/bot-assignments/:jid', botAssignmentController.deleteAssignment);
+
+// ==========================================
+// Learning routes (AI Learning from responses)
+// ==========================================
+router.get('/learning', learningController.getAll);
+router.get('/learning/pending', learningController.getPending);
+router.get('/learning/settings', learningController.getSettings);
+router.get('/learning/stats', learningController.getStats);
+router.get('/learning/:id', learningController.getById);
+router.put('/learning/settings', learningController.updateSettings);
+router.post('/learning/:id/approve', learningController.approve);
+router.post('/learning/:id/reject', learningController.reject);
+router.delete('/learning/cleanup', learningController.cleanup);
+
+// ==========================================
+// Triggers routes (Bot activation keywords)
+// ==========================================
+router.get('/triggers/config', triggerController.getConfig);
+router.post('/triggers/listener/toggle', triggerController.toggleListener);
+router.post('/triggers/require/toggle', triggerController.toggleRequireTrigger);
+router.put('/triggers/settings', triggerController.updateSettings);
+router.get('/triggers', triggerController.getAllTriggers);
+router.get('/triggers/stats', triggerController.getStats);
+router.get('/triggers/export', triggerController.exportTriggers);
+router.post('/triggers/import', triggerController.importTriggers);
+router.post('/triggers/test', triggerController.testMessage);
+router.post('/triggers/enable-all', triggerController.enableAllTriggers);
+router.post('/triggers/disable-all', triggerController.disableAllTriggers);
+router.post('/triggers/stats/reset', triggerController.resetStats);
+router.get('/triggers/:id', triggerController.getTrigger);
+router.post('/triggers', triggerController.createTrigger);
+router.put('/triggers/:id', triggerController.updateTrigger);
+router.delete('/triggers/:id', triggerController.deleteTrigger);
+router.post('/triggers/:id/toggle', triggerController.toggleTrigger);
+
+// ==========================================
+// Admin API routes (Domain Entities CRUD)
+// ==========================================
+router.use('/admin', adminRoutes);
+
+// ==========================================
+// Institutional routes (Contacts, Students, Templates, Attendance)
+// ==========================================
+router.use('/', institutionalRoutes);
+
+// ==========================================
+// Phase 3: Data & Analytics API
+// ==========================================
+import apiRouter from './api';
+router.use('/', apiRouter);
 
 export default router;

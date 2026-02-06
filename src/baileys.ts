@@ -1,18 +1,19 @@
 import { EventEmitter } from 'events';
 import pino, { Logger } from 'pino'
+// @ts-ignore
 import NodeCache from 'node-cache'
 import makeWASocket, {
     DisconnectReason,
     fetchLatestBaileysVersion,
     getAggregateVotesInPollMessage,
     makeCacheableSignalKeyStore,
-    makeInMemoryStore,
     useMultiFileAuthState,
     Browsers,
     proto,
     WAMessageContent,
     WAMessageKey
 } from '@whiskeysockets/baileys'
+import makeInMemoryStore from './store';
 import { readFileSync, existsSync, rmSync } from 'fs';
 
 import ffmpeg from 'fluent-ffmpeg';
@@ -54,7 +55,7 @@ const msgRetryCounterCache = new NodeCache()
 
 export class BaileysClass extends EventEmitter {
     private vendor: any;
-    private store: any;
+    public store: any;
     private globalVendorArgs: Args;
     private sock: any;
     private NAME_DIR_SESSION: string;
@@ -89,19 +90,19 @@ export class BaileysClass extends EventEmitter {
 
     initBailey = async (): Promise<void> => {
 
-        const logger : Logger = pino({ level: this.globalVendorArgs.debug ? 'debug' : 'fatal' })
+        const logger: Logger = pino({ level: this.globalVendorArgs.debug ? 'debug' : 'fatal' })
         const { state, saveCreds } = await useMultiFileAuthState(this.NAME_DIR_SESSION);
         const { version, isLatest } = await fetchLatestBaileysVersion()
 
         if (this.globalVendorArgs.debug) console.log(`using WA v${version.join('.')}, isLatest: ${isLatest}`)
 
         this.store = makeInMemoryStore({ logger })
-        this.store.readFromFile(`${this.NAME_DIR_SESSION}/baileys_store.json`)
+        const storePath = `${this.NAME_DIR_SESSION}/baileys_store.json`;
+        if (existsSync(storePath)) {
+            this.store.readFromFile(storePath);
+        }
         setInterval(() => {
-            const path = `${this.NAME_DIR_SESSION}/baileys_store.json`;
-            if(existsSync(path)) {
-                this.store.writeToFile(path);
-            }
+            this.store.writeToFile(storePath);
         }, 10_000);
 
         try {
@@ -115,7 +116,6 @@ export class BaileysClass extends EventEmitter {
         this.sock = makeWASocket({
             version,
             logger,
-            printQRInTerminal: this.plugin || this.globalVendorArgs.usePairingCode ? false : true,
             auth: {
                 creds: state.creds,
                 keys: makeCacheableSignalKeyStore(state.keys, logger),
@@ -124,6 +124,7 @@ export class BaileysClass extends EventEmitter {
             msgRetryCounterCache,
             generateHighQualityLinkPreview: true,
             getMessage: this.getMessage,
+            syncFullHistory: true,
         })
 
         this.store?.bind(this.sock.ev)
@@ -158,7 +159,7 @@ export class BaileysClass extends EventEmitter {
 
         if (connection === 'close') {
             if (statusCode !== DisconnectReason.loggedOut) this.initBailey();
-            if (statusCode === DisconnectReason.loggedOut) this.clearSessionAndRestart();
+            if (statusCode === DisconnectReason.loggedOut) await this.clearSessionAndRestart();
         }
 
         if (connection === 'open') {
@@ -180,9 +181,40 @@ export class BaileysClass extends EventEmitter {
         }
     }
 
-    clearSessionAndRestart = (): void => {
+    clearSessionAndRestart = async (): Promise<void> => {
         const PATH_BASE = join(process.cwd(), this.NAME_DIR_SESSION);
-        rmSync(PATH_BASE, { recursive: true, force: true });
+
+        // 1. Close socket to release locks
+        try {
+            if (this.sock) {
+                this.sock.end(undefined);
+                this.sock = undefined;
+                this.vendor = undefined;
+            }
+        } catch (e) {
+            console.error('Error closing socket:', e);
+        }
+
+        // 2. Wait for locks to release
+        await new Promise(resolve => setTimeout(resolve, 2000));
+
+        // 3. Delete session directory with retry
+        const maxRetries = 3;
+        for (let i = 0; i < maxRetries; i++) {
+            try {
+                if (existsSync(PATH_BASE)) {
+                    rmSync(PATH_BASE, { recursive: true, force: true });
+                }
+                console.log(`Session cleared successfully on attempt ${i + 1}`);
+                break;
+            } catch (error: any) {
+                console.error(`Error clearing session (attempt ${i + 1}):`, error.message);
+                if (i < maxRetries - 1) {
+                    await new Promise(resolve => setTimeout(resolve, 1000));
+                }
+            }
+        }
+
         this.initBailey();
     }
 
@@ -267,11 +299,22 @@ export class BaileysClass extends EventEmitter {
                                 voters: pollCreation,
                                 type: 'poll'
                             };
-
                             this.emit('message', payload);
                         }
                     }
                 }
+            }
+        },
+        {
+            event: 'messaging-history.set',
+            func: (payload) => {
+                this.emit('history_sync', payload);
+            }
+        },
+        {
+            event: 'chats.upsert',
+            func: (chats) => {
+                this.emit('chats_upsert', chats);
             }
         }
     ]
@@ -543,6 +586,216 @@ export class BaileysClass extends EventEmitter {
             },
         }, { quoted: messages });
     }
+
+    getProfilePictureUrl = async (jid: string): Promise<string | null> => {
+        if (!this.vendor) return null;
+        try {
+            const url = await this.vendor.profilePictureUrl(jid, 'image');
+            return url;
+        } catch (error) {
+            return null;
+        }
+    }
+
+    fetchMessageHistory = async (jid: string, count: number = 50): Promise<any[]> => {
+        if (!this.vendor || !this.store) {
+            console.log('Vendor or store not available for fetchMessageHistory');
+            return [];
+        }
+
+        const getFromStore = () => {
+            const phoneNumber = jid.split('@')[0];
+            const possibleJids = Array.from(new Set([
+                jid,
+                `${phoneNumber}@s.whatsapp.net`,
+                `${phoneNumber}@lid`,
+                `${phoneNumber}@c.us`,
+            ]));
+
+            for (const tryJid of possibleJids) {
+                const storeMessages = this.store.messages[tryJid];
+                if (storeMessages?.array?.length > 0) {
+                    console.log(`Found ${storeMessages.array.length} messages for ${tryJid}`);
+                    return storeMessages.array.slice(-count);
+                }
+            }
+            return null;
+        }
+
+        // First try to get from store
+        const fromStore = getFromStore();
+        if (fromStore && fromStore.length > 0) {
+            if (this.globalVendorArgs.debug) console.log(`Returning ${fromStore.length} messages from store for ${jid}`);
+            return fromStore;
+        }
+
+        try {
+            const canonicalJid = `${jid.split('@')[0]}@s.whatsapp.net`;
+            if (this.globalVendorArgs.debug) console.log(`Attempting to fetch history for ${canonicalJid}`);
+
+            // Try multiple approaches to fetch history
+
+            // 1. Use chatModify to trigger history sync
+            try {
+                await this.vendor.chatModify(
+                    { lastMessages: [{ key: { remoteJid: canonicalJid }, messageTimestamp: Math.floor(Date.now() / 1000) }], clear: false },
+                    canonicalJid
+                );
+                if (this.globalVendorArgs.debug) console.log(`ChatModify sent for ${canonicalJid}`);
+            } catch (chatModifyError) {
+                if (this.globalVendorArgs.debug) console.log(`ChatModify failed for ${canonicalJid}:`, chatModifyError.message);
+            }
+
+            // 2. Try to use readMessages if available
+            try {
+                // Some versions of baileys support explicit message loading
+                if (this.vendor.loadMessages) {
+                    const loadedMessages = await this.vendor.loadMessages(canonicalJid, count);
+                    if (loadedMessages && loadedMessages.length > 0) {
+                        if (this.globalVendorArgs.debug) console.log(`Loaded ${loadedMessages.length} messages using loadMessages`);
+                        return loadedMessages;
+                    }
+                }
+            } catch (loadError) {
+                if (this.globalVendorArgs.debug) console.log(`loadMessages failed:`, loadError.message);
+            }
+
+            // Wait for messages to sync
+            await new Promise(resolve => setTimeout(resolve, 2000)); // Increased timeout
+
+            // Check store again
+            const syncedMessages = getFromStore();
+            if (syncedMessages && syncedMessages.length > 0) {
+                if (this.globalVendorArgs.debug) console.log(`Found ${syncedMessages.length} messages after sync for ${jid}`);
+                return syncedMessages;
+            }
+
+            if (this.globalVendorArgs.debug) console.log(`No messages found for ${jid} after all attempts`);
+            return [];
+
+        } catch (error: any) {
+            console.error(`Error in fetchMessageHistory for ${jid}:`, error.message);
+            return getFromStore() || [];
+        }
+    }
+
+    getMessagesFromStore = (jid: string, count: number = 50): any[] => {
+        if (!this.store?.messages?.[jid]) return [];
+        return this.store.messages[jid].array?.slice(-count) || [];
+    }
+
+    /**
+     * Mark messages as read and send read receipts to WhatsApp
+     * @param jid - Chat JID
+     * @param messageKeys - Array of message keys to mark as read (optional, marks all if not provided)
+     */
+    markMessagesAsRead = async (jid: string, messageKeys?: WAMessageKey[]): Promise<boolean> => {
+        if (!this.vendor) {
+            console.log('Vendor not available for markMessagesAsRead');
+            return false;
+        }
+
+        try {
+            const canonicalJid = jid.includes('@') ? jid : `${jid}@s.whatsapp.net`;
+
+            // Try multiple JID formats to find messages
+            const phoneNumber = canonicalJid.split('@')[0];
+            const possibleJids = [
+                canonicalJid,
+                `${phoneNumber}@s.whatsapp.net`,
+                `${phoneNumber}@lid`,
+                `${phoneNumber}@c.us`
+            ];
+
+            let messagesJid = canonicalJid;
+            let messages: any[] = [];
+
+            // Find messages in store using multiple JID formats
+            for (const tryJid of possibleJids) {
+                const storeMessages = this.store?.messages?.[tryJid]?.array;
+                if (storeMessages && storeMessages.length > 0) {
+                    messagesJid = tryJid;
+                    messages = storeMessages;
+                    break;
+                }
+            }
+
+            if (messageKeys && messageKeys.length > 0) {
+                // Mark specific messages as read
+                await this.vendor.readMessages(messageKeys);
+                if (this.globalVendorArgs.debug) console.log(`Marked ${messageKeys.length} messages as read for ${canonicalJid}`);
+
+                // Update status in store for these specific messages
+                const messageIdSet = new Set(messageKeys.map(k => k.id));
+                messages.forEach((msg: any) => {
+                    if (messageIdSet.has(msg.key?.id)) {
+                        msg.status = 3; // 3 = read
+                    }
+                });
+            } else {
+                // Mark all unread messages in chat as read
+                const unreadMessages = messages.filter((msg: any) =>
+                    msg.key?.fromMe === false &&
+                    msg.message &&
+                    msg.status !== 3 // Not already read
+                );
+
+                const unreadKeys = unreadMessages
+                    .map((msg: any) => msg.key)
+                    .filter((key: any) => key);
+
+                if (unreadKeys.length > 0) {
+                    await this.vendor.readMessages(unreadKeys);
+                    if (this.globalVendorArgs.debug) console.log(`Marked ${unreadKeys.length} unread messages as read for ${canonicalJid}`);
+
+                    // Update status in store for all unread messages
+                    unreadMessages.forEach((msg: any) => {
+                        msg.status = 3; // 3 = read
+                    });
+                }
+            }
+
+            // Update chat unread count in store
+            if (this.store?.chats) {
+                const chat = this.store.chats.get?.(canonicalJid) ||
+                    (this.store.chats[canonicalJid]);
+                if (chat) {
+                    chat.unreadCount = 0;
+                }
+            }
+
+            return true;
+        } catch (error: any) {
+            console.error(`Error marking messages as read for ${jid}:`, error.message);
+            return false;
+        }
+    }
+
+    /**
+     * Get unread message count for a chat
+     * Status values: 0=pending, 1=sent, 2=delivered, 3=read, 4=error
+     */
+    getUnreadCount = (jid: string): number => {
+        // Try multiple JID formats
+        const phoneNumber = jid.split('@')[0];
+        const possibleJids = [
+            jid,
+            `${phoneNumber}@s.whatsapp.net`,
+            `${phoneNumber}@lid`,
+            `${phoneNumber}@c.us`
+        ];
+
+        for (const tryJid of possibleJids) {
+            const storeMessages = this.store?.messages?.[tryJid]?.array;
+            if (storeMessages && storeMessages.length > 0) {
+                return storeMessages.filter((msg: any) =>
+                    msg.key?.fromMe === false &&
+                    msg.message &&
+                    msg.status !== 3 // 3 = read
+                ).length;
+            }
+        }
+
+        return 0;
+    }
 }
-
-

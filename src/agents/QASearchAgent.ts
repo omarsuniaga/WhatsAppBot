@@ -380,6 +380,50 @@ export class QASearchAgent {
     }
 
     /**
+     * Add a learned FAQ from user responses
+     */
+    addLearnedFaq(data: {
+        questions: string[];
+        answer: string;
+        keywords: string[];
+        category: string;
+    }): QAItem {
+        if (!this.knowledgeBase) {
+            throw new Error('Knowledge base not loaded');
+        }
+
+        // Find or create category
+        let category = this.knowledgeBase.categories.find(c => c.id === data.category);
+        
+        if (!category) {
+            // Create a new category for learned items
+            category = {
+                id: data.category,
+                name: data.category.charAt(0).toUpperCase() + data.category.slice(1),
+                icon: 'brain',
+                items: []
+            };
+            this.knowledgeBase.categories.push(category);
+        }
+
+        // Create the FAQ item
+        const faqItem: QAItem = {
+            id: `faq-learned-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            keywords: data.keywords,
+            questions: data.questions,
+            answer: data.answer,
+            priority: 1
+        };
+
+        category.items.push(faqItem);
+        this.save();
+
+        console.log(`[QASearchAgent] Added learned FAQ: ${faqItem.id}`);
+
+        return faqItem;
+    }
+
+    /**
      * Save knowledge base to file
      */
     private save(): void {

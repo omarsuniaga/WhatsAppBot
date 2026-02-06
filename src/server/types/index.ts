@@ -1,4 +1,11 @@
 // ==========================================
+// Knowledge Base, Escalation, Broadcast Types
+// ==========================================
+export * from './knowledge';
+export * from './escalation';
+export * from './broadcast';
+
+// ==========================================
 // Contact Groups (Local Tags/Labels)
 // ==========================================
 
@@ -144,7 +151,101 @@ export interface ApiResponse<T = any> {
     message?: string;
 }
 
+
 export interface BulkSendResult {
     queued: number;
     messageIds: string[];
+}
+
+// ==========================================
+// Administrative System Types (Phase 1)
+// ==========================================
+
+export interface StudentData {
+  id: string;
+  nombre: string;
+  apellido: string;
+  grupo: string;
+  nivel: string;
+  instrumento: string;
+  representante: {
+    nombre: string;
+    telefono?: string;
+    email?: string;
+  };
+  estado: 'activo' | 'inactivo';
+  createdAt?: string | Date;
+}
+
+export interface ClassData {
+  id: string;
+  nombre: string;
+  instrumento: string;
+  nivel: string;
+  maestroId: string;
+  maestroNombre: string;
+  horario: {
+    inicio: string;
+    fin: string;
+  };
+  salón: string;
+  alumnos: string[];
+  grupo: string;
+  fechas?: string[];
+}
+
+export interface AttendanceData {
+  id: string;
+  classId: string;
+  fecha: string;
+  teacherId: string;
+  maestroNombre: string;
+  data: {
+    presentes: string[];
+    ausentes: string[];
+    justificacion: Array<{
+      studentId: string;
+      motivo: string;
+      fuenteFlota: boolean;
+      timestamp: Date | string;
+    }>;
+    observacion: string;
+  };
+  estado: 'en_progreso' | 'completado';
+  createdAt: Date | string;
+}
+
+export interface AbsenceData {
+  id: string;
+  studentId: string;
+  studentName: string;
+  classId: string;
+  fecha: string;
+  motivo: {
+    tipo: 'enfermedad' | 'viaje' | 'evento_personal' | 'otro';
+    descripcion?: string;
+  };
+  justificada: boolean;
+  estado: 'pendiente' | 'confirmada';
+  createdAt: Date | string;
+}
+
+export interface TeacherData {
+  id: string;
+  nombre: string;
+  email: string;
+  whatsappPhone?: string;
+  grupo: string;
+  pushTokens: { token: string; platform: string }[];
+}
+
+export interface NotificationData {
+  id: string;
+  title: string;
+  message: string;
+  channel: 'push' | 'whatsapp' | string[];
+  recipientId: string;
+  recipientPhone?: string;
+  isRead: boolean;
+  createdAt: Date | string;
 }

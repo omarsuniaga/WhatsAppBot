@@ -37,7 +37,7 @@ export const logout = async (req: Request, res: Response): Promise<void> => {
         const bot = botService.getBot();
 
         if (bot) {
-            (bot as any).clearSessionAndRestart();
+            await (bot as any).clearSessionAndRestart();
         }
 
         res.json({

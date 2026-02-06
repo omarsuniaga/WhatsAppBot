@@ -25,6 +25,22 @@ interface HttpResponse {
 }
 
 const utils = {
+    normalizeJid: (jid: string): string | null => {
+        if (!jid || typeof jid !== 'string') {
+            return null;
+        }
+        // For groups, return the original JID
+        if (jid.includes('@g.us')) {
+            return jid;
+        }
+        // Extract numbers from the start of the string
+        const match = jid.match(/^(\d+)/);
+        if (match) {
+            return `${match[1]}@contact`;
+        }
+        // Fallback for other JIDs like 'status@broadcast'
+        return jid;
+    },
     formatPhone: (contact: string, full: boolean = false): string => {
         let domain = contact.includes('@g.us') ? '@g.us' : '@s.whatsapp.net';
         contact = contact.replace(domain, '');

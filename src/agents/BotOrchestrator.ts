@@ -1,9 +1,14 @@
 import { existsSync, readFileSync, writeFileSync } from 'fs';
 import { join } from 'path';
+import { EventEmitter } from 'events';
 import { DecisionAgent } from './DecisionAgent';
 import { QASearchAgent, QASearchResult, BusinessContext, QAItem } from './QASearchAgent';
 import { GeminiAgent } from './GeminiAgent';
 import { AIResponse } from './types';
+import PendingAlertService, { GeminiAnalysis, ConversationMessage as AlertConversation } from '../server/services/pendingAlertService';
+import BotAssignmentService from '../server/services/botAssignmentService';
+import LearningService from '../server/services/learningService';
+import MetricsService from '../server/services/metricsService';
 
 export interface BotConfig {
     version: number;
@@ -27,10 +32,12 @@ export interface BotConfig {
 }
 
 export interface BotResponse {
-    source: 'qa' | 'gemini' | 'fallback';
+    source: 'qa' | 'gemini' | 'fallback' | 'escalated';
     response: string;
     confidence?: number;
     matchedItem?: QASearchResult;
+    escalated?: boolean;
+    alertId?: string;
 }
 
 export interface ConversationMessage {
@@ -41,7 +48,11 @@ export interface ConversationMessage {
 
 const CONFIG_PATH = join(process.cwd(), 'data', 'bot-config.json');
 
-export class BotOrchestrator {
+// Input validation constants
+const MAX_MESSAGE_LENGTH = 4096;
+const MAX_CUSTOMER_NAME_LENGTH = 100;
+
+export class BotOrchestrator extends EventEmitter {
     private static instance: BotOrchestrator;
     private config: BotConfig;
     private decisionAgent: DecisionAgent;
@@ -49,15 +60,33 @@ export class BotOrchestrator {
     private geminiAgent: GeminiAgent | null = null;
     private conversationHistory: Map<string, ConversationMessage[]> = new Map();
 
+    // New services
+    private alertService: PendingAlertService;
+    private assignmentService: BotAssignmentService;
+    private learningService: LearningService;
+    private metrics: MetricsService;
+
     private constructor() {
+        super();
         this.config = this.loadConfig();
         this.decisionAgent = new DecisionAgent();
         this.qaAgent = new QASearchAgent();
+
+        // Initialize new services
+        this.alertService = PendingAlertService.getInstance();
+        this.assignmentService = BotAssignmentService.getInstance();
+        this.learningService = LearningService.getInstance();
+        this.metrics = MetricsService.getInstance();
 
         // Initialize Gemini if API key is available
         if (this.config.geminiApiKey) {
             this.initGemini(this.config.geminiApiKey);
         }
+
+        // Forward alert events
+        this.alertService.on('alert:new', (alert) => this.emit('alert:new', alert));
+        this.alertService.on('alert:responded', (alert) => this.emit('alert:responded', alert));
+        this.alertService.on('alert:dismissed', (alert) => this.emit('alert:dismissed', alert));
     }
 
     static getInstance(): BotOrchestrator {
@@ -122,40 +151,114 @@ export class BotOrchestrator {
     }
 
     /**
+     * Validate and sanitize JID
+     */
+    private validateJid(jid: string): string | null {
+        if (!jid || typeof jid !== 'string') return null;
+        const trimmed = jid.trim();
+        // Basic WhatsApp JID validation
+        if (!/^\d+@(s\.whatsapp\.net|g\.us)$/.test(trimmed)) {
+            console.warn(`[BotOrchestrator] Invalid JID: ${jid}`);
+            return null;
+        }
+        return trimmed;
+    }
+
+    /**
+     * Sanitize message input
+     */
+    private sanitizeMessage(message: string): string {
+        if (!message || typeof message !== 'string') return '';
+        return message.trim().slice(0, MAX_MESSAGE_LENGTH);
+    }
+
+    /**
+     * Sanitize customer name
+     */
+    private sanitizeCustomerName(name: string): string {
+        if (!name || typeof name !== 'string') return 'Cliente';
+        // Remove potentially dangerous characters and limit length
+        return name.trim().replace(/[<>"'&]/g, '').slice(0, MAX_CUSTOMER_NAME_LENGTH) || 'Cliente';
+    }
+
+    /**
      * Main method to process incoming messages
+     * Now integrates with BotAssignmentService and PendingAlertService
      */
     async processMessage(
         jid: string,
         message: string,
-        isFromMe: boolean = false
+        isFromMe: boolean = false,
+        customerName: string = 'Cliente'
     ): Promise<BotResponse | null> {
+        // Input validation
+        const validJid = this.validateJid(jid);
+        if (!validJid) {
+            console.error('[BotOrchestrator] Invalid JID provided');
+            return null;
+        }
+
+        const sanitizedMessage = this.sanitizeMessage(message);
+        if (!sanitizedMessage) {
+            console.log('[BotOrchestrator] Empty message, skipping');
+            return null;
+        }
+
+        const sanitizedName = this.sanitizeCustomerName(customerName);
+
+        // Anti-loop: Never respond to own messages
+        if (isFromMe) {
+            return null;
+        }
+
         // Check if bot is enabled globally
         if (!this.config.enabled) {
             return null;
         }
 
-        // Check if bot should reply to this chat
-        if (!this.decisionAgent.shouldReply(jid, isFromMe)) {
+        // Get assignment for this chat (use validated JID)
+        const assignment = this.assignmentService.getAssignment(validJid);
+        
+        // Check if bot is active for this chat (use assignment or decision agent)
+        const isBotActive = assignment?.botConfig.enabled ?? this.decisionAgent.shouldReply(validJid, isFromMe);
+        
+        if (!isBotActive) {
             return null;
         }
 
+        // Get chat-specific config or use defaults
+        const chatConfig = assignment?.botConfig || this.assignmentService.getDefaultConfig();
+        const escalateThreshold = chatConfig.escalateThreshold || this.config.settings.minConfidenceForQA;
+
         // Update stats
         this.config.stats.totalQueries++;
+        this.assignmentService.incrementStats(validJid, 'totalMessages');
 
         // Store message in conversation history
-        this.addToHistory(jid, 'user', message);
+        this.addToHistory(validJid, 'user', sanitizedMessage);
 
-        // Step 1: Search in Q&A knowledge base
-        const qaResult = this.qaAgent.search(message);
+        // Track processing time for metrics
+        const startTime = Date.now();
 
-        if (qaResult && qaResult.confidence >= this.config.settings.minConfidenceForQA) {
+        // Step 1: Search in Q&A knowledge base (with allowed categories filter)
+        const qaResult = this.qaAgent.search(sanitizedMessage);
+
+        if (qaResult && qaResult.confidence >= escalateThreshold) {
             // Found a good match in Q&A
-            const processedAnswer = this.qaAgent.processAnswer(qaResult.item.answer);
+            let processedAnswer = this.qaAgent.processAnswer(qaResult.item.answer);
+            
+            // Apply personality formatting if configured
+            processedAnswer = this.formatResponseByPersonality(processedAnswer, chatConfig.personality);
 
             this.config.stats.qaMatches++;
             this.saveConfig();
+            this.assignmentService.incrementStats(validJid, 'autoResponses');
 
-            this.addToHistory(jid, 'assistant', processedAnswer);
+            // Record KB resolution metric
+            const responseTimeMs = Date.now() - startTime;
+            this.metrics.resolvedByKB(validJid, qaResult.confidence, responseTimeMs);
+
+            this.addToHistory(validJid, 'assistant', processedAnswer);
 
             return {
                 source: 'qa',
@@ -166,23 +269,28 @@ export class BotOrchestrator {
         }
 
         // Step 2: Try Gemini if enabled and available
-        if (
-            this.config.settings.useGeminiFallback &&
-            this.geminiAgent
-        ) {
+        if (this.config.settings.useGeminiFallback && this.geminiAgent) {
             try {
-                const context = this.buildGeminiContext(jid, message);
-                const aiResponse = await this.geminiAgent.generateResponse(message, context);
+                const context = this.buildGeminiContext(validJid, sanitizedMessage);
+                const aiResponse = await this.geminiAgent.generateResponse(sanitizedMessage, context);
 
                 if (aiResponse.text) {
+                    let response = aiResponse.text;
+                    response = this.formatResponseByPersonality(response, chatConfig.personality);
+
                     this.config.stats.geminiResponses++;
                     this.saveConfig();
+                    this.assignmentService.incrementStats(validJid, 'autoResponses');
 
-                    this.addToHistory(jid, 'assistant', aiResponse.text);
+                    // Record AI resolution metric
+                    const aiResponseTimeMs = Date.now() - startTime;
+                    this.metrics.resolvedByAI(validJid, aiResponseTimeMs, qaResult?.confidence);
+
+                    this.addToHistory(validJid, 'assistant', response);
 
                     return {
                         source: 'gemini',
-                        response: aiResponse.text,
+                        response,
                         confidence: qaResult?.confidence
                     };
                 }
@@ -191,20 +299,128 @@ export class BotOrchestrator {
             }
         }
 
-        // Step 3: Return fallback message
+        // Step 3: Cannot answer - Create escalation alert if enabled
+        if (chatConfig.autoEscalate && this.alertService.checkRateLimit(validJid)) {
+            const geminiAnalysis: GeminiAnalysis = {
+                intent: this.extractIntent(sanitizedMessage),
+                suggestedTopics: this.qaAgent.getRelatedItems(sanitizedMessage, 3).map(i => i.questions[0]),
+                confidence: qaResult?.confidence || 0,
+                reason: 'No se encontró respuesta con suficiente confianza en la base de conocimiento',
+                canAnswer: false
+            };
+
+            // Get conversation context
+            const conversationContext: AlertConversation[] = this.getHistory(validJid)
+                .slice(-5)
+                .map(msg => ({
+                    role: msg.role === 'user' ? 'customer' as const : 'bot' as const,
+                    message: msg.content,
+                    timestamp: new Date(msg.timestamp).toISOString()
+                }));
+
+            // Create alert
+            const alert = await this.alertService.createAlert(
+                validJid,
+                sanitizedName,
+                sanitizedMessage,
+                geminiAnalysis,
+                conversationContext
+            );
+
+            this.config.stats.noMatches++;
+            this.saveConfig();
+            this.assignmentService.incrementStats(validJid, 'escalations');
+
+            // Record escalation metric
+            this.metrics.escalatedToHuman(validJid, alert.id, alert.priority, geminiAnalysis.intent);
+
+            // Return escalation message
+            const escalationMessage = chatConfig.customFallback || 
+                'Un momento, estoy consultando con mi equipo para darte la mejor respuesta.';
+
+            this.addToHistory(validJid, 'assistant', escalationMessage);
+
+            return {
+                source: 'escalated',
+                response: escalationMessage,
+                confidence: qaResult?.confidence || 0,
+                escalated: true,
+                alertId: alert.id
+            };
+        }
+
+        // Step 4: Return generic fallback (no escalation)
         const fallbackConfig = this.qaAgent.getFallbackConfig();
-        const fallbackMessage = fallbackConfig?.noMatch || 'Lo siento, no puedo ayudarte con eso en este momento.';
+        const fallbackMessage = chatConfig.customFallback || 
+            fallbackConfig?.noMatch || 
+            'Lo siento, no puedo ayudarte con eso en este momento.';
 
         this.config.stats.noMatches++;
         this.saveConfig();
 
-        this.addToHistory(jid, 'assistant', fallbackMessage);
+        // Record fallback metric
+        this.metrics.fallbackResponse(validJid, 'no_escalation_configured');
+
+        this.addToHistory(validJid, 'assistant', fallbackMessage);
 
         return {
             source: 'fallback',
             response: fallbackMessage,
             confidence: qaResult?.confidence || 0
         };
+    }
+
+    /**
+     * Extract intent from message (simple version)
+     */
+    private extractIntent(message: string): string {
+        const lowerMessage = message.toLowerCase();
+        
+        const intents: Record<string, string[]> = {
+            'consulta_precio': ['precio', 'costo', 'cuanto', 'cuánto', 'vale', 'tarifa'],
+            'consulta_horario': ['horario', 'hora', 'abierto', 'cerrado', 'atienden'],
+            'consulta_ubicacion': ['direccion', 'dirección', 'donde', 'dónde', 'ubicacion', 'ubicación'],
+            'queja': ['queja', 'reclamo', 'problema', 'mal', 'error', 'falla'],
+            'soporte': ['ayuda', 'help', 'soporte', 'asistencia', 'no funciona'],
+            'pedido': ['pedido', 'orden', 'compra', 'comprar', 'ordenar'],
+            'envio': ['envio', 'envío', 'delivery', 'entrega', 'llega']
+        };
+
+        for (const [intent, keywords] of Object.entries(intents)) {
+            if (keywords.some(kw => lowerMessage.includes(kw))) {
+                return intent;
+            }
+        }
+
+        return 'consulta_general';
+    }
+
+    /**
+     * Format response based on personality
+     */
+    private formatResponseByPersonality(
+        response: string, 
+        personality: 'professional' | 'friendly' | 'formal'
+    ): string {
+        // Basic personality adjustments
+        switch (personality) {
+            case 'friendly':
+                // Add friendly touches if not present
+                if (!response.includes('!') && !response.includes('😊')) {
+                    response = response.replace(/\.$/, '! 😊');
+                }
+                break;
+            case 'formal':
+                // Remove emojis and casual expressions
+                response = response.replace(/[😊😄👍🎉]/g, '');
+                response = response.replace(/!/g, '.');
+                break;
+            case 'professional':
+            default:
+                // Keep as is
+                break;
+        }
+        return response;
     }
 
     /**
@@ -398,5 +614,76 @@ export class BotOrchestrator {
      */
     reloadKnowledgeBase(): void {
         this.qaAgent.loadKnowledgeBase();
+    }
+
+    // ==========================================
+    // New Service Accessors
+    // ==========================================
+
+    /**
+     * Get Alert Service for managing pending alerts
+     */
+    getAlertService(): PendingAlertService {
+        return this.alertService;
+    }
+
+    /**
+     * Get Assignment Service for managing bot assignments
+     */
+    getAssignmentService(): BotAssignmentService {
+        return this.assignmentService;
+    }
+
+    /**
+     * Get Learning Service for managing learned responses
+     */
+    getLearningService(): LearningService {
+        return this.learningService;
+    }
+
+    /**
+     * Respond to a pending alert and optionally learn from it
+     */
+    async respondToAlert(
+        alertId: string,
+        response: string,
+        shouldLearn: boolean = true,
+        respondedBy: string = 'admin'
+    ): Promise<{ success: boolean; learnedId?: string }> {
+        const result = await this.alertService.respondToAlert(alertId, response, respondedBy, shouldLearn);
+        
+        if (!result) {
+            return { success: false };
+        }
+
+        const { alert } = result;
+
+        // Learn from the response if enabled
+        if (shouldLearn && alert.shouldLearn) {
+            try {
+                const learned = await this.learningService.learnFromResponse(
+                    alertId,
+                    alert.originalMessage,
+                    response
+                );
+
+                // Link alert to learned response
+                this.alertService.linkToLearnedFaq(alertId, learned.id);
+                this.assignmentService.incrementStats(alert.chatJid, 'learnedResponses');
+
+                return { success: true, learnedId: learned.id };
+            } catch (error) {
+                console.error('[BotOrchestrator] Learning failed:', error);
+            }
+        }
+
+        return { success: true };
+    }
+
+    /**
+     * Get Gemini agent (for learning service)
+     */
+    getGeminiAgent(): GeminiAgent | null {
+        return this.geminiAgent;
     }
 }

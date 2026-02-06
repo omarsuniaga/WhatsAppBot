@@ -5,3 +5,23 @@ core.class.log
 db.json
 lib/
 *.qr.png
+
+# Firebase Admin SDK credentials (SECURITY)
+*-firebase-adminsdk*.json
+serviceAccountKey.json
+google-services.json
+.env
+.env.*
+!.env.example
+
+# Coverage & testing
+coverage/
+
+# IDE & tools
+.claude/
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

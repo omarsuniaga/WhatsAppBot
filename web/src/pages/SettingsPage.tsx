@@ -7,32 +7,35 @@ import { useState, useEffect } from 'react';
 import { BookOpen, Ticket, RefreshCw, Key } from 'lucide-react';
 import { knowledgeApi, escalationApi, broadcastApi } from '../api/client';
 import { GeminiConfigPanel } from '../components/settings/GeminiConfigPanel';
-import { 
-    useLocalStorage, 
-    STORAGE_KEYS, 
+import {
+    STORAGE_KEYS,
     DEFAULT_CONFIGS,
     KnowledgeConfig,
     EscalationConfig,
     BroadcastConfig
 } from '../hooks/useLocalStorage';
+import { useFirebaseConfig } from '../hooks/useFirebaseConfig';
 
 export const SettingsPage = () => {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
-    const [message, setMessage] = useState<{type: 'success' | 'error', text: string} | null>(null);
-    
-    const [knowledgeConfig, setKnowledgeConfig] = useLocalStorage<KnowledgeConfig>(
-        STORAGE_KEYS.KNOWLEDGE_CONFIG, 
+    const [message, setMessage] = useState<{ type: 'success' | 'error', text: string } | null>(null);
+
+    const [knowledgeConfig, setKnowledgeConfig, loadingKnowledge] = useFirebaseConfig<KnowledgeConfig>(
+        'knowledgeConfig',
+        STORAGE_KEYS.KNOWLEDGE_CONFIG,
         DEFAULT_CONFIGS.knowledge
     );
 
-    const [escalationConfig, setEscalationConfig] = useLocalStorage<EscalationConfig>(
-        STORAGE_KEYS.ESCALATION_CONFIG, 
+    const [escalationConfig, setEscalationConfig, loadingEscalation] = useFirebaseConfig<EscalationConfig>(
+        'escalationConfig',
+        STORAGE_KEYS.ESCALATION_CONFIG,
         DEFAULT_CONFIGS.escalation
     );
 
-    const [broadcastConfig, setBroadcastConfig] = useLocalStorage<BroadcastConfig>(
-        STORAGE_KEYS.BROADCAST_CONFIG, 
+    const [broadcastConfig, setBroadcastConfig, loadingBroadcast] = useFirebaseConfig<BroadcastConfig>(
+        'broadcastConfig',
+        STORAGE_KEYS.BROADCAST_CONFIG,
         DEFAULT_CONFIGS.broadcast
     );
 
@@ -83,7 +86,7 @@ export const SettingsPage = () => {
         }
     };
 
-    if (loading) {
+    if (loading || loadingKnowledge || loadingEscalation || loadingBroadcast) {
         return (
             <div className="h-full flex items-center justify-center">
                 <RefreshCw className="w-8 h-8 animate-spin text-whatsapp-green" />
@@ -110,7 +113,7 @@ export const SettingsPage = () => {
                         {message.text}
                     </div>
                 )}
-                
+
                 <div className="space-y-6">
                     {/* Gemini AI Config */}
                     <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4 sm:p-6 transition-colors">
@@ -144,7 +147,7 @@ export const SettingsPage = () => {
                                 <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
                                     Tono de Respuestas
                                 </label>
-                                <select 
+                                <select
                                     value={knowledgeConfig.toneStyle}
                                     onChange={(e) => setKnowledgeConfig(prev => ({ ...prev, toneStyle: e.target.value }))}
                                     className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg focus:outline-none focus:border-whatsapp-green bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-100"
@@ -170,9 +173,9 @@ export const SettingsPage = () => {
                                     <p className="text-sm text-gray-500 dark:text-gray-400">Asignar tickets automáticamente</p>
                                 </div>
                                 <label className="relative inline-flex items-center cursor-pointer">
-                                    <input 
-                                        type="checkbox" 
-                                        className="sr-only peer" 
+                                    <input
+                                        type="checkbox"
+                                        className="sr-only peer"
                                         checked={escalationConfig.autoAssign}
                                         onChange={(e) => setEscalationConfig(prev => ({ ...prev, autoAssign: e.target.checked }))}
                                     />

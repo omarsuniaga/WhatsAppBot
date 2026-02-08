@@ -51,13 +51,14 @@ export const LoginPage: React.FC = () => {
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 py-12 px-4 sm:px-6 lg:px-8">
-            <div className="max-w-md w-full space-y-8 bg-white p-10 rounded-2xl shadow-2xl">
+        <div className="min-h-dynamic-screen flex items-center justify-center bg-gradient-to-br from-indigo-500 via-purple-500 to-pink-500 py-6 px-4 sm:px-6 lg:px-8">
+            <div className="@container max-w-md w-full space-y-8 bg-white p-6 sm:p-10 rounded-2xl shadow-2xl">
                 <div>
-                    <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900">
+                     {/* Fluid Typography using clamp() */}
+                    <h2 className="mt-2 text-center font-extrabold text-gray-900" style={{ fontSize: 'clamp(1.5rem, 1.2rem + 1.5vw, 2.25rem)' }}>
                         Sistema Administrativo
                     </h2>
-                    <p className="mt-2 text-center text-sm text-gray-600">
+                    <p className="mt-2 text-center text-sm sm:text-base text-gray-600">
                         Inicia sesión para acceder al dashboard
                     </p>
                 </div>
@@ -74,8 +75,8 @@ export const LoginPage: React.FC = () => {
                     )}
 
                     <div className="rounded-md shadow-sm -space-y-px">
-                        <div>
-                            <label htmlFor="email" className="sr-only">
+                        <div className="mb-4">
+                            <label htmlFor="email" className="block text-sm font-medium text-gray-700 mb-1">
                                 Email
                             </label>
                             <input
@@ -84,15 +85,15 @@ export const LoginPage: React.FC = () => {
                                 type="email"
                                 autoComplete="email"
                                 required
-                                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-t-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                                placeholder="Email"
+                                className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm min-h-[44px]"
+                                placeholder="tu@email.com"
                                 value={email}
                                 onChange={(e) => setEmail(e.target.value)}
                                 disabled={loading}
                             />
                         </div>
                         <div>
-                            <label htmlFor="password" className="sr-only">
+                            <label htmlFor="password" className="block text-sm font-medium text-gray-700 mb-1">
                                 Contraseña
                             </label>
                             <input
@@ -101,8 +102,8 @@ export const LoginPage: React.FC = () => {
                                 type="password"
                                 autoComplete="current-password"
                                 required
-                                className="appearance-none rounded-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-b-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm"
-                                placeholder="Contraseña"
+                                className="appearance-none relative block w-full px-3 py-3 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 focus:z-10 sm:text-sm min-h-[44px]"
+                                placeholder="********"
                                 value={password}
                                 onChange={(e) => setPassword(e.target.value)}
                                 disabled={loading}
@@ -114,7 +115,7 @@ export const LoginPage: React.FC = () => {
                         <button
                             type="submit"
                             disabled={loading}
-                            className="group relative w-full flex justify-center py-2 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                            className="group relative w-full flex justify-center py-3 px-4 border border-transparent text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed min-h-[44px] transition-colors duration-200"
                         >
                             {loading ? (
                                 <span className="flex items-center">
@@ -130,19 +131,19 @@ export const LoginPage: React.FC = () => {
                         </button>
                     </div>
 
-                    <div className="text-center">
+                    <div className="text-center pt-2">
                         <Link
                             to="/register"
-                            className="font-medium text-indigo-600 hover:text-indigo-500"
+                            className="text-sm font-medium text-indigo-600 hover:text-indigo-500 transition-colors duration-200 p-2 inline-block min-h-[44px]"
                         >
                             ¿No tienes cuenta? Regístrate aquí
                         </Link>
                     </div>
                 </form>
 
-                <div className="mt-6 text-center text-xs text-gray-500">
+                <div className="mt-6 text-center text-xs text-gray-400 border-t pt-4">
                     <p>Usuario de prueba:</p>
-                    <p className="font-mono mt-1">admin@test.com / admin123</p>
+                    <p className="font-mono mt-1 select-all bg-gray-50 p-2 rounded inline-block">admin@test.com / admin123</p>
                 </div>
             </div>
         </div>

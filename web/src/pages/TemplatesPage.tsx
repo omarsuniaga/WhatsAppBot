@@ -3,10 +3,11 @@
  */
 
 import { useState, useEffect } from 'react';
-import { 
-    Mail, Plus, Edit2, Trash2, RefreshCw, 
-    Copy, AlertCircle, Search
+import {
+    Mail, Plus, Edit2, Trash2, RefreshCw,
+    Copy, AlertCircle, Search, Sparkles
 } from 'lucide-react';
+import { aiApi } from '../api/aiApi';
 
 interface Template {
     id: string;
@@ -23,7 +24,7 @@ interface Template {
     updatedAt?: string;
 }
 
-const API_BASE = 'http://localhost:3001/api/admin';
+const API_BASE = import.meta.env.VITE_API_BASE_URL;
 
 export const TemplatesPage = () => {
     const [templates, setTemplates] = useState<Template[]>([]);
@@ -109,7 +110,7 @@ export const TemplatesPage = () => {
         navigator.clipboard.writeText(text);
     };
 
-    const filteredTemplates = templates.filter(t => 
+    const filteredTemplates = templates.filter(t =>
         t.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         t.body.toLowerCase().includes(searchTerm.toLowerCase())
     );
@@ -167,7 +168,7 @@ export const TemplatesPage = () => {
                         {filteredTemplates.length > 0 ? (
                             <div className="space-y-4">
                                 {filteredTemplates.map((template) => (
-                                    <div 
+                                    <div
                                         key={template.id}
                                         className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4"
                                     >
@@ -212,7 +213,7 @@ export const TemplatesPage = () => {
                                         {template.variables.length > 0 && (
                                             <div className="mt-2 flex flex-wrap gap-1">
                                                 {template.variables.map((v) => (
-                                                    <span 
+                                                    <span
                                                         key={v}
                                                         className="px-2 py-0.5 text-xs bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400 rounded"
                                                     >
@@ -269,11 +270,62 @@ const TemplateEditModal = ({
     const [category, setCategory] = useState(template.category || 'notification');
     const [description, setDescription] = useState(template.description || '');
 
+    // AI state
+    const [showAI, setShowAI] = useState(false);
+    const [aiPurpose, setAiPurpose] = useState('recordatorio');
+    const [aiTone, setAiTone] = useState('profesional');
+    const [aiContext, setAiContext] = useState('');
+    const [generatingAI, setGeneratingAI] = useState(false);
+
     const extractVariables = (text: string): string[] => {
         const regex = /{{\s*(\w+)\s*}}/g;
         const matches = text.match(regex) || [];
         const variables = matches.map(match => match.replace(/{{\s*|\s*}}/g, ''));
         return [...new Set(variables)];
+    };
+
+    const handleGenerateWithAI = async () => {
+        setGeneratingAI(true);
+        try {
+            const response = await aiApi.generateTemplate({
+                purpose: aiPurpose,
+                tone: aiTone,
+                additionalContext: aiContext,
+                targetAudience: 'padres'
+            });
+
+            if (response.success && response.template) {
+                setName(response.template.nombre);
+                setBody(response.template.contenido);
+                setCode(response.template.nombre.toLowerCase().replace(/\s+/g, '_'));
+                setShowAI(false);
+            }
+        } catch (error) {
+            alert('Error generando con IA: ' + error);
+        } finally {
+            setGeneratingAI(false);
+        }
+    };
+
+    const handleGenerateVariation = async (tone: string) => {
+        setGeneratingAI(true);
+        try {
+            const response = await aiApi.generateVariation({
+                baseContent: body,
+                baseName: name,
+                newTone: tone,
+                purpose: aiPurpose
+            });
+
+            if (response.success && response.variation) {
+                setBody(response.variation.contenido);
+                setName(response.variation.nombre);
+            }
+        } catch (error) {
+            alert('Error generando variación: ' + error);
+        } finally {
+            setGeneratingAI(false);
+        }
     };
 
     const handleSave = () => {
@@ -292,13 +344,112 @@ const TemplateEditModal = ({
         });
     };
 
+    const variables = extractVariables(body);
+    const charCount = body.length;
+
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-            <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-lg mx-4 p-6">
-                <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 mb-4">
-                    {isNew ? 'Nueva Plantilla' : 'Editar Plantilla'}
-                </h2>
-                
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+            <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-2xl mx-4 p-6 max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                {/* Header with AI button */}
+                <div className="flex items-center justify-between mb-4">
+                    <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100">
+                        {isNew ? 'Nueva Plantilla' : 'Editar Plantilla'}
+                    </h2>
+                    <button
+                        onClick={() => setShowAI(!showAI)}
+                        className="flex items-center gap-2 px-3 py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-lg text-sm font-medium transition-colors"
+                    >
+                        <Sparkles className="w-4 h-4" />
+                        {showAI ? 'Cerrar IA' : 'Generar con IA'}
+                    </button>
+                </div>
+
+                {/* AI Assistant Panel */}
+                {showAI && (
+                    <div className="mb-4 p-4 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 border border-purple-200 dark:border-purple-700 rounded-lg">
+                        <h5 className="font-medium text-sm mb-3 text-purple-900 dark:text-purple-200">✨ Generador de Plantillas con IA</h5>
+
+                        <div className="space-y-3">
+                            <div className="grid grid-cols-2 gap-3">
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Propósito</label>
+                                    <select
+                                        value={aiPurpose}
+                                        onChange={(e) => setAiPurpose(e.target.value)}
+                                        className="w-full px-2 py-1 text-sm border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                                    >
+                                        <option value="recordatorio">Recordatorio</option>
+                                        <option value="bienvenida">Bienvenida</option>
+                                        <option value="confirmacion">Confirmación</option>
+                                        <option value="promocion">Promoción</option>
+                                        <option value="personalizado">Personalizado</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Tono</label>
+                                    <select
+                                        value={aiTone}
+                                        onChange={(e) => setAiTone(e.target.value)}
+                                        className="w-full px-2 py-1 text-sm border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                                    >
+                                        <option value="formal">Formal</option>
+                                        <option value="amigable">Amigable</option>
+                                        <option value="profesional">Profesional</option>
+                                        <option value="casual">Casual</option>
+                                    </select>
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">Contexto adicional (opcional)</label>
+                                <input
+                                    value={aiContext}
+                                    onChange={(e) => setAiContext(e.target.value)}
+                                    placeholder="Ej: para clase de piano los viernes"
+                                    className="w-full px-2 py-1 text-sm border dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
+                                />
+                            </div>
+
+                            <button
+                                onClick={handleGenerateWithAI}
+                                disabled={generatingAI}
+                                className="w-full flex items-center justify-center gap-2 px-4 py-2 bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white rounded-lg font-medium disabled:opacity-50"
+                            >
+                                {generatingAI ? (
+                                    <>
+                                        <RefreshCw className="w-4 h-4 animate-spin" />
+                                        Generando...
+                                    </>
+                                ) : (
+                                    <>
+                                        <Sparkles className="w-4 h-4" />
+                                        Generar Plantilla
+                                    </>
+                                )}
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Variation Buttons */}
+                {!showAI && body && (
+                    <div className="mb-4 p-3 bg-gradient-to-r from-purple-50 to-blue-50 dark:from-purple-900/10 dark:to-blue-900/10 border border-purple-200 dark:border-purple-700 rounded-lg">
+                        <p className="text-xs font-medium text-purple-900 dark:text-purple-200 mb-2">✨ Generar Variación</p>
+                        <div className="flex gap-2 flex-wrap">
+                            <button onClick={() => handleGenerateVariation('formal')} disabled={generatingAI} className="px-3 py-1 text-xs bg-white dark:bg-gray-700 border border-purple-200 dark:border-purple-600 text-purple-700 dark:text-purple-300 rounded hover:bg-purple-50 dark:hover:bg-purple-900/20 disabled:opacity-50">
+                                📝 Más Formal
+                            </button>
+                            <button onClick={() => handleGenerateVariation('amigable')} disabled={generatingAI} className="px-3 py-1 text-xs bg-white dark:bg-gray-700 border border-purple-200 dark:border-purple-600 text-purple-700 dark:text-purple-300 rounded hover:bg-purple-50 dark:hover:bg-purple-900/20 disabled:opacity-50">
+                                😊 Más Amigable
+                            </button>
+                            <button onClick={() => handleGenerateVariation('conciso')} disabled={generatingAI} className="px-3 py-1 text-xs bg-white dark:bg-gray-700 border border-purple-200 dark:border-purple-600 text-purple-700 dark:text-purple-300 rounded hover:bg-purple-50 dark:hover:bg-purple-900/20 disabled:opacity-50">
+                                ⚡ Más Conciso
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Form Fields */}
                 <div className="space-y-4">
                     <div className="grid grid-cols-2 gap-4">
                         <div>
@@ -369,9 +520,36 @@ const TemplateEditModal = ({
                             className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-500 font-mono text-sm"
                             placeholder="Usa {{variable}} para variables dinámicas"
                         />
-                        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
-                            Variables detectadas: {extractVariables(body).join(', ') || 'ninguna'}
-                        </p>
+
+                        {/* Character Counter */}
+                        <div className="flex items-center justify-between mt-1">
+                            <p className="text-xs text-gray-500 dark:text-gray-400">
+                                Usa {'{{'}variable{'}}'} para datos dinámicos
+                            </p>
+                            <div className="flex items-center gap-2">
+                                <span className={`text-xs font-medium ${charCount > 1000 ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
+                                    {charCount} / 1000
+                                </span>
+                                {charCount > 1000 && (
+                                    <span className="text-red-600 dark:text-red-400 flex items-center gap-1 text-xs">
+                                        <AlertCircle className="w-3 h-3" />
+                                        Muy largo
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Variables Badge */}
+                        {variables.length > 0 && (
+                            <div className="mt-2 flex flex-wrap gap-1">
+                                <span className="text-xs text-gray-600 dark:text-gray-400">Variables:</span>
+                                {variables.map((v) => (
+                                    <span key={v} className="text-xs bg-cyan-100 dark:bg-cyan-900/30 text-cyan-700 dark:text-cyan-400 px-2 py-0.5 rounded">
+                                        {`{{${v}}}`}
+                                    </span>
+                                ))}
+                            </div>
+                        )}
                     </div>
                 </div>
 

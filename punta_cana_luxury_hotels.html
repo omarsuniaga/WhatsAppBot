@@ -1,0 +1,690 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hoteles Luxury Punta Cana - Directorio Completo</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            background: white;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 40px 20px;
+            border-radius: 10px;
+            margin-bottom: 40px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 42px;
+            margin-bottom: 10px;
+        }
+        
+        .header p {
+            font-size: 18px;
+            opacity: 0.9;
+        }
+        
+        .intro {
+            background: #f5f5f5;
+            padding: 20px;
+            border-radius: 8px;
+            margin-bottom: 30px;
+            border-left: 4px solid #667eea;
+        }
+        
+        .hotel-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+            gap: 25px;
+            margin-bottom: 40px;
+        }
+        
+        .hotel-card {
+            background: white;
+            border: 1px solid #ddd;
+            border-radius: 10px;
+            padding: 25px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+            transition: transform 0.3s, box-shadow 0.3s;
+        }
+        
+        .hotel-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        }
+        
+        .hotel-name {
+            font-size: 20px;
+            font-weight: bold;
+            color: #667eea;
+            margin-bottom: 10px;
+            border-bottom: 2px solid #667eea;
+            padding-bottom: 10px;
+        }
+        
+        .hotel-category {
+            display: inline-block;
+            background: #667eea;
+            color: white;
+            padding: 5px 10px;
+            border-radius: 20px;
+            font-size: 12px;
+            margin-bottom: 15px;
+            font-weight: bold;
+        }
+        
+        .contact-info {
+            margin-top: 15px;
+        }
+        
+        .contact-item {
+            margin: 10px 0;
+            padding: 10px;
+            background: #f9f9f9;
+            border-radius: 5px;
+        }
+        
+        .contact-label {
+            font-weight: bold;
+            color: #555;
+            font-size: 12px;
+            text-transform: uppercase;
+        }
+        
+        .contact-value {
+            color: #333;
+            margin-top: 3px;
+            word-break: break-all;
+            font-size: 14px;
+        }
+        
+        .location {
+            color: #666;
+            font-size: 13px;
+            margin-top: 12px;
+            padding-top: 12px;
+            border-top: 1px solid #ddd;
+        }
+        
+        .location-icon {
+            color: #e74c3c;
+            margin-right: 5px;
+        }
+        
+        .highlights {
+            margin-top: 12px;
+            font-size: 12px;
+            color: #555;
+        }
+        
+        .highlight-tag {
+            display: inline-block;
+            background: #e8f4f8;
+            color: #2c3e50;
+            padding: 3px 8px;
+            border-radius: 12px;
+            margin: 3px 3px 3px 0;
+            font-size: 11px;
+        }
+        
+        .category-section {
+            margin-bottom: 50px;
+        }
+        
+        .category-title {
+            font-size: 28px;
+            color: #2c3e50;
+            margin-bottom: 20px;
+            padding-bottom: 10px;
+            border-bottom: 3px solid #667eea;
+        }
+        
+        .footer {
+            background: #2c3e50;
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+            margin-top: 50px;
+        }
+        
+        .footer h3 {
+            margin-bottom: 15px;
+        }
+        
+        .phone {
+            color: #e74c3c;
+            font-weight: bold;
+        }
+        
+        .email {
+            color: #3498db;
+        }
+        
+        .price-range {
+            background: #fef5e7;
+            color: #d68910;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-size: 12px;
+            margin-top: 5px;
+            display: inline-block;
+        }
+        
+        @media print {
+            body {
+                padding: 0;
+            }
+            .hotel-card {
+                page-break-inside: avoid;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <!-- HEADER -->
+        <div class="header">
+            <h1>🌴 DIRECTORIO DE HOTELES LUXURY</h1>
+            <p>Punta Cana, República Dominicana</p>
+            <p>Resorts 5 Estrellas - All Inclusive & Boutique</p>
+        </div>
+
+        <!-- INTRO -->
+        <div class="intro">
+            <strong>📌 GUÍA PARA CONTACTOS COMERCIALES:</strong><br>
+            Esta lista contiene los principales hoteles de lujo en Punta Cana con experiencias exclusivas. 
+            Perfecto para contactar sobre servicios de entretenimiento, música viva, eventos corporativos y experiencias especiales.
+            <br><br>
+            <strong>💡 CONSEJO:</strong> Llama primero al Hotel Manager o Events Manager. 
+            Mencioná que buscas contratar un "trío de cuerdas profesional con experiencia visual premium".
+        </div>
+
+        <!-- CAP CANA LUXURY SECTION -->
+        <div class="category-section">
+            <h2 class="category-title">🏰 CAP CANA - ULTRA LUXURY (Zona Premium)</h2>
+            <p style="margin-bottom: 20px; color: #666;">
+                <strong>Cap Cana:</strong> Comunidad privada gated de 30,000 acres. Ubicación: 10-15 min del aeropuerto.
+                <br><strong>Nivel:</strong> Ultra-exclusive, arquitectura de clase mundial, $400-700+ por noche
+            </p>
+
+            <div class="hotel-grid">
+                <!-- SECRETS CAP CANA -->
+                <div class="hotel-card">
+                    <div class="hotel-name">🎭 SECRETS CAP CANA RESORT & SPA</div>
+                    <span class="hotel-category">ADULTS ONLY • ULTRA LUXURY</span>
+                    
+                    <div class="contact-info">
+                        <div class="contact-item">
+                            <div class="contact-label">📞 Teléfono Principal</div>
+                            <div class="contact-value phone">+1 (809) 469-7545</div>
+                            <div class="contact-value">Toll Free: 1-888-774-0040</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📧 Email</div>
+                            <div class="contact-value email">reservations@secretsresorts.com</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📍 Dirección</div>
+                            <div class="contact-value">Playa Juanillo, Boulevard Zona Hotelera<br>Cap Cana, Punta Cana</div>
+                        </div>
+                    </div>
+                    
+                    <div class="highlights">
+                        <strong>Características:</strong>
+                        <div class="highlight-tag">457 Suites Lujosas</div>
+                        <div class="highlight-tag">Juanillo Beach</div>
+                        <div class="highlight-tag">10 Restaurantes</div>
+                        <div class="highlight-tag">Preferred Club</div>
+                    </div>
+                    <div class="price-range">💰 $400-700/noche</div>
+                </div>
+
+                <!-- SANCTUARY CAP CANA -->
+                <div class="hotel-card">
+                    <div class="hotel-name">👑 SANCTUARY CAP CANA</div>
+                    <span class="hotel-category">LUXURY COLLECTION • ADULTS ONLY</span>
+                    
+                    <div class="contact-info">
+                        <div class="contact-item">
+                            <div class="contact-label">📞 Teléfono</div>
+                            <div class="contact-value phone">+1 (809) 562-9191</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📧 Email</div>
+                            <div class="contact-value email">reservations@sanctuarycapcana.com</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📍 Dirección</div>
+                            <div class="contact-value">Boulevard Zona Hotelera, Playa Juanillo<br>Cap Cana, Punta Cana</div>
+                        </div>
+                    </div>
+                    
+                    <div class="highlights">
+                        <strong>Características:</strong>
+                        <div class="highlight-tag">324 Suites</div>
+                        <div class="highlight-tag">Arquitectura Colonial</div>
+                        <div class="highlight-tag">Spa Premium</div>
+                        <div class="highlight-tag">Romance</div>
+                    </div>
+                    <div class="price-range">💰 $350-650/noche</div>
+                </div>
+
+                <!-- ST. REGIS CAP CANA -->
+                <div class="hotel-card">
+                    <div class="hotel-name">💎 ST. REGIS CAP CANA RESORT</div>
+                    <span class="hotel-category">ST. REGIS • ULTRA LUXURY</span>
+                    
+                    <div class="contact-info">
+                        <div class="contact-item">
+                            <div class="contact-label">📞 Teléfono</div>
+                            <div class="contact-value phone">+1 (809) 469-7088</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📧 Email</div>
+                            <div class="contact-value email">concierge@stregispuntacana.com</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📍 Dirección</div>
+                            <div class="contact-value">Punta Espada, Cap Cana<br>Punta Cana</div>
+                        </div>
+                    </div>
+                    
+                    <div class="highlights">
+                        <strong>Características:</strong>
+                        <div class="highlight-tag">200 Suites Opulentas</div>
+                        <div class="highlight-tag">9 Restaurantes</div>
+                        <div class="highlight-tag">St. Regis Spa</div>
+                        <div class="highlight-tag">Servicio Butler</div>
+                    </div>
+                    <div class="price-range">💰 $450-800/noche</div>
+                </div>
+
+                <!-- HYATT ZIVA CAP CANA -->
+                <div class="hotel-card">
+                    <div class="hotel-name">🌊 HYATT ZIVA CAP CANA</div>
+                    <span class="hotel-category">HYATT • ALL-INCLUSIVE</span>
+                    
+                    <div class="contact-info">
+                        <div class="contact-item">
+                            <div class="contact-label">📞 Teléfono</div>
+                            <div class="contact-value phone">+1 (809) 469-7090</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📧 Email</div>
+                            <div class="contact-value email">PUJIA-Concierge@hyatt.com</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📍 Dirección</div>
+                            <div class="contact-value">Boulevard Zona Hotelera, Playa Juanillo<br>Cap Cana, Punta Cana</div>
+                        </div>
+                    </div>
+                    
+                    <div class="highlights">
+                        <strong>Características:</strong>
+                        <div class="highlight-tag">375 Suites Ocean View</div>
+                        <div class="highlight-tag">#1 TripAdvisor 2025</div>
+                        <div class="highlight-tag">Canapolis Water Park</div>
+                        <div class="highlight-tag">Larimar Spa</div>
+                    </div>
+                    <div class="price-range">💰 $300-600/noche</div>
+                </div>
+
+                <!-- TRS CAP CANA -->
+                <div class="hotel-card">
+                    <div class="hotel-name">✨ TRS CAP CANA HOTEL</div>
+                    <span class="hotel-category">PALLADIUM • ADULTS ONLY</span>
+                    
+                    <div class="contact-info">
+                        <div class="contact-item">
+                            <div class="contact-label">📞 Teléfono</div>
+                            <div class="contact-value phone">+1 (809) 221-8160</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📧 Email</div>
+                            <div class="contact-value email">info.capcana@palladiumhotelgroup.com</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📍 Dirección</div>
+                            <div class="contact-value">Cap Cana Area, Punta Cana</div>
+                        </div>
+                    </div>
+                    
+                    <div class="highlights">
+                        <strong>Características:</strong>
+                        <div class="highlight-tag">115 Luxury Suites</div>
+                        <div class="highlight-tag">39 Swim-up Suites</div>
+                        <div class="highlight-tag">Personal Butler</div>
+                        <div class="highlight-tag">Infinite Indulgence</div>
+                    </div>
+                    <div class="price-range">💰 $350-650/noche</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- BAVARO/UVERO ALTO SECTION -->
+        <div class="category-section">
+            <h2 class="category-title">🏖️ BÁVARO & UVERO ALTO - LUXURY PREMIUM</h2>
+            <p style="margin-bottom: 20px; color: #666;">
+                <strong>Ubicación:</strong> 15-25 min del aeropuerto. Playas más amplias, ambiente más dinámico.
+                <br><strong>Nivel:</strong> 5 estrellas premium, $250-500+ por noche
+            </p>
+
+            <div class="hotel-grid">
+                <!-- W PUNTA CANA -->
+                <div class="hotel-card">
+                    <div class="hotel-name">🎨 W PUNTA CANA</div>
+                    <span class="hotel-category">MARRIOTT • ADULTS ONLY</span>
+                    
+                    <div class="contact-info">
+                        <div class="contact-item">
+                            <div class="contact-label">📞 Teléfono</div>
+                            <div class="contact-value phone">+1 (809) 552-2600</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📧 Email</div>
+                            <div class="contact-value email">info@wpuntacana.com</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📍 Dirección</div>
+                            <div class="contact-value">Uvero Alto, Punta Cana</div>
+                        </div>
+                    </div>
+                    
+                    <div class="highlights">
+                        <strong>Características:</strong>
+                        <div class="highlight-tag">340 Spacious Suites</div>
+                        <div class="highlight-tag">12 Restaurants</div>
+                        <div class="highlight-tag">AWAY Spa</div>
+                        <div class="highlight-tag">Whatever/Whenever</div>
+                    </div>
+                    <div class="price-range">💰 $350-650/noche</div>
+                </div>
+
+                <!-- HARD ROCK HOTEL -->
+                <div class="hotel-card">
+                    <div class="hotel-name">🎸 HARD ROCK HOTEL & CASINO</div>
+                    <span class="hotel-category">ALL-INCLUSIVE • FAMILY FRIENDLY</span>
+                    
+                    <div class="contact-info">
+                        <div class="contact-item">
+                            <div class="contact-label">📞 Teléfono</div>
+                            <div class="contact-value phone">+1 (809) 687-0000</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📧 Email</div>
+                            <div class="contact-value email">frontdesk@hardrock.com</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📍 Dirección</div>
+                            <div class="contact-value">Boulevard Turístico del Este, km 28<br>Bavaro, Punta Cana</div>
+                        </div>
+                    </div>
+                    
+                    <div class="highlights">
+                        <strong>Características:</strong>
+                        <div class="highlight-tag">Casino 24/7</div>
+                        <div class="highlight-tag">Live Entertainment</div>
+                        <div class="highlight-tag">Full-Service Spa</div>
+                        <div class="highlight-tag">Golf Course</div>
+                    </div>
+                    <div class="price-range">💰 $200-450/noche</div>
+                </div>
+
+                <!-- GRAND PALLADIUM -->
+                <div class="hotel-card">
+                    <div class="hotel-name">🏰 GRAND PALLADIUM PUNTA CANA</div>
+                    <span class="hotel-category">PALLADIUM • ALL-INCLUSIVE</span>
+                    
+                    <div class="contact-info">
+                        <div class="contact-item">
+                            <div class="contact-label">📞 Teléfono</div>
+                            <div class="contact-value phone">+1 (809) 221-8149</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📧 Email</div>
+                            <div class="contact-value email">Info.puntacana@palladiumhotelgroup.com</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📍 Dirección</div>
+                            <div class="contact-value">Avenida Francia, Playas de Bávaro<br>El Cortecito, Punta Cana</div>
+                        </div>
+                    </div>
+                    
+                    <div class="highlights">
+                        <strong>Características:</strong>
+                        <div class="highlight-tag">3 Resorts Interconectados</div>
+                        <div class="highlight-tag">13 Restaurantes</div>
+                        <div class="highlight-tag">Zentropia Spa</div>
+                        <div class="highlight-tag">Convención Center</div>
+                    </div>
+                    <div class="price-range">💰 $150-400/noche</div>
+                </div>
+
+                <!-- PUNTA CANA PRINCESS -->
+                <div class="hotel-card">
+                    <div class="hotel-name">👸 PUNTA CANA PRINCESS</div>
+                    <span class="hotel-category">5-STAR • ADULTS ONLY</span>
+                    
+                    <div class="contact-info">
+                        <div class="contact-item">
+                            <div class="contact-label">📞 Teléfono</div>
+                            <div class="contact-value phone">+1 (809) 687-5000</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📧 Email</div>
+                            <div class="contact-value email">reservaciones@princess-hotels.com</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📍 Dirección</div>
+                            <div class="contact-value">Bávaro Beach, Punta Cana<br>25 min del Aeropuerto</div>
+                        </div>
+                    </div>
+                    
+                    <div class="highlights">
+                        <strong>Características:</strong>
+                        <div class="highlight-tag">256 Luxury Suites</div>
+                        <div class="highlight-tag">14 Honeymoon Suites</div>
+                        <div class="highlight-tag">5 Restaurantes</div>
+                        <div class="highlight-tag">Spa Wellness</div>
+                    </div>
+                    <div class="price-range">💰 $200-500/noche</div>
+                </div>
+
+                <!-- MELIA PUNTA CANA BEACH -->
+                <div class="hotel-card">
+                    <div class="hotel-name">🌅 MELIÁ PUNTA CANA BEACH</div>
+                    <span class="hotel-category">MELIA • WELLNESS INCLUSIVE</span>
+                    
+                    <div class="contact-info">
+                        <div class="contact-item">
+                            <div class="contact-label">📞 Teléfono</div>
+                            <div class="contact-value phone">+1 (809) 552-1899</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📧 Email</div>
+                            <div class="contact-value email">meliapuntacanabeach@melia.com</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📍 Dirección</div>
+                            <div class="contact-value">Avenida Alemania<br>Punta Cana</div>
+                        </div>
+                    </div>
+                    
+                    <div class="highlights">
+                        <strong>Características:</strong>
+                        <div class="highlight-tag">Adults Only</div>
+                        <div class="highlight-tag">YHI Spa</div>
+                        <div class="highlight-tag">14 Restaurantes</div>
+                        <div class="highlight-tag">Wellness Focus</div>
+                    </div>
+                    <div class="price-range">💰 $180-400/noche</div>
+                </div>
+
+                <!-- IMPRESSIVE PREMIUM -->
+                <div class="hotel-card">
+                    <div class="hotel-name">⭐ IMPRESSIVE PREMIUM PUNTA CANA</div>
+                    <span class="hotel-category">5-STAR • MODERN</span>
+                    
+                    <div class="contact-info">
+                        <div class="contact-item">
+                            <div class="contact-label">📞 Teléfono</div>
+                            <div class="contact-value phone">+1 (809) 552-1819</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📧 Email</div>
+                            <div class="contact-value email">customerservice@impressiveresorts.com</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📍 Dirección</div>
+                            <div class="contact-value">Avenida Alemania A-B 108<br>Punta Cana</div>
+                        </div>
+                    </div>
+                    
+                    <div class="highlights">
+                        <strong>Características:</strong>
+                        <div class="highlight-tag">Playa Premium Exclusiva</div>
+                        <div class="highlight-tag">Múltiples Restaurantes</div>
+                        <div class="highlight-tag">Piscinas Amplias</div>
+                        <div class="highlight-tag">Ambiente Moderno</div>
+                    </div>
+                    <div class="price-range">💰 $180-420/noche</div>
+                </div>
+
+                <!-- PARADISUS GRAND CANA -->
+                <div class="hotel-card">
+                    <div class="hotel-name">🌴 PARADISUS GRAND CANA - ALL SUITES</div>
+                    <span class="hotel-category">MELIA • ALL-INCLUSIVE</span>
+                    
+                    <div class="contact-info">
+                        <div class="contact-item">
+                            <div class="contact-label">📞 Teléfono</div>
+                            <div class="contact-value phone">+1 (809) 726-9600</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📧 Email</div>
+                            <div class="contact-value email">paradisusgrandcana@melia.com</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📍 Dirección</div>
+                            <div class="contact-value">Avenida Alemania, Playa de Bávaro<br>Punta Cana</div>
+                        </div>
+                    </div>
+                    
+                    <div class="highlights">
+                        <strong>Características:</strong>
+                        <div class="highlight-tag">Todas Suites</div>
+                        <div class="highlight-tag">Parque Acuático</div>
+                        <div class="highlight-tag">Zentropia Spa</div>
+                        <div class="highlight-tag">Familia Friendly</div>
+                    </div>
+                    <div class="price-range">💰 $150-350/noche</div>
+                </div>
+
+                <!-- MELIÁ CARIBE BEACH -->
+                <div class="hotel-card">
+                    <div class="hotel-name">🏝️ MELIÁ CARIBE BEACH RESORT</div>
+                    <span class="hotel-category">MELIA • THE LEVEL SERVICE</span>
+                    
+                    <div class="contact-info">
+                        <div class="contact-item">
+                            <div class="contact-label">📞 Teléfono</div>
+                            <div class="contact-value phone">+1 (809) 221-1290</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📧 Email</div>
+                            <div class="contact-value email">meliacaribebeach@melia.com</div>
+                        </div>
+                        
+                        <div class="contact-item">
+                            <div class="contact-label">📍 Dirección</div>
+                            <div class="contact-value">Avenida Alemania s/n<br>Punta Cana</div>
+                        </div>
+                    </div>
+                    
+                    <div class="highlights">
+                        <strong>Características:</strong>
+                        <div class="highlight-tag">Adults Only</div>
+                        <div class="highlight-tag">Toboganes Acuáticos</div>
+                        <div class="highlight-tag">The Level Service</div>
+                        <div class="highlight-tag">Bodas Románticas</div>
+                    </div>
+                    <div class="price-range">💰 $150-380/noche</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- FOOTER -->
+        <div class="footer">
+            <h3>📋 GUÍA RÁPIDA DE CONTACTO</h3>
+            
+            <p style="margin: 15px 0;">
+                <strong>MEJOR HORA PARA LLAMAR:</strong> 10:00 AM - 3:00 PM (Hora Local RD)<br>
+                <strong>ZONA HORARIA:</strong> UTC -4 (Eastern Daylight Time)<br>
+                <strong>DEPARTAMENTO RECOMENDADO:</strong> Hotel Manager / Event Manager / Entertainment Director
+            </p>
+            
+            <p style="margin: 15px 0;">
+                <strong>PITCH SUGERIDO:</strong><br>
+                "Hola, ¿Puedo hablar con el Hotel Manager o Event Manager? Contacto para ofrecer un servicio de entretenimiento premium: 
+                un trío de cuerdas profesional y ensayado (2 violines + contrabajo) con experiencia visual especial (luces LED, 
+                coreografía, repertorio moderno). Disponible para eventos corporativos, cenas de gala, bodas y entretenimiento 
+                nocturno premium."
+            </p>
+            
+            <hr style="margin: 20px 0; border: none; border-top: 1px solid rgba(255,255,255,0.3);">
+            
+            <p style="font-size: 12px;">
+                <strong>Actualizado:</strong> Febrero 2026<br>
+                <strong>Datos verificados:</strong> Sitios web oficiales y sistemas de reserva<br>
+                <strong>Nota:</strong> Precios y horarios sujetos a cambios. Confirmar directamente con hotel.
+            </p>
+        </div>
+
+    </div>
+</body>
+</html>

@@ -1,0 +1,21 @@
+{
+  "entities": [
+    {
+      "firstName": "Jennifer",
+      "lastName": "Villalba",
+      "phones": [
+        "18097176627"
+      ],
+      "email": "omars.violin@gmail.com",
+      "type": "guardian",
+      "status": "active",
+      "studentIds": [],
+      "notes": "TESTEANDO",
+      "tags": [],
+      "id": "ct_jtrl1cczanj5",
+      "createdAt": 1769509014,
+      "updatedAt": 1769509014
+    }
+  ],
+  "lastUpdated": 1769509014
+}

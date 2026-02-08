@@ -78,6 +78,7 @@ export const GeminiConfigPanel = ({ onConfigured, compact = false }: GeminiConfi
         setErrorMessage(null);
 
         try {
+            // Save to backend
             const response = await configApi.setAiApiKey(apiKey.trim());
 
             if (response.data?.success) {
@@ -85,6 +86,20 @@ export const GeminiConfigPanel = ({ onConfigured, compact = false }: GeminiConfi
                 setIsConfigured(true);
                 setConnectionStatus('connected');
                 localStorage.setItem('gemini_api_key_configured', 'true');
+
+                // Also save to Firebase for cross-device sync (import needed)
+                try {
+                    const { auth } = await import('../../lib/firebase');
+                    const { userConfigService } = await import('../../services/firestore/userConfigService');
+
+                    if (auth.currentUser) {
+                        await userConfigService.updateGeminiApiKey(auth.currentUser.uid, apiKey.trim());
+                        console.log('✅ API key also saved to Firebase');
+                    }
+                } catch (fbError) {
+                    console.warn('Could not save to Firebase:', fbError);
+                    // Don't fail the whole operation if Firebase sync fails
+                }
 
                 setTimeout(() => setSaveStatus('idle'), 2000);
                 onConfigured?.();
@@ -182,8 +197,8 @@ export const GeminiConfigPanel = ({ onConfigured, compact = false }: GeminiConfi
                         connectionStatus === 'connected'
                             ? "bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400"
                             : connectionStatus === 'error'
-                            ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
-                            : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
+                                ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400"
+                                : "bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400"
                     )}>
                         {connectionStatus === 'connected' ? 'Conectado' : connectionStatus === 'error' ? 'Error' : 'No configurado'}
                     </div>
@@ -231,8 +246,8 @@ export const GeminiConfigPanel = ({ onConfigured, compact = false }: GeminiConfi
                         saveStatus === 'saved'
                             ? "bg-green-500"
                             : saveStatus === 'error'
-                            ? "bg-red-500"
-                            : "bg-whatsapp-green hover:bg-green-600"
+                                ? "bg-red-500"
+                                : "bg-whatsapp-green hover:bg-green-600"
                     )}
                 >
                     {saveStatus === 'saving' ? (
@@ -304,8 +319,8 @@ export const GeminiConfigPanel = ({ onConfigured, compact = false }: GeminiConfi
                 connectionStatus === 'connected'
                     ? "bg-green-500/10 border-green-500/30"
                     : connectionStatus === 'error'
-                    ? "bg-red-500/10 border-red-500/30"
-                    : "bg-[#182229] border-[#374248]"
+                        ? "bg-red-500/10 border-red-500/30"
+                        : "bg-[#182229] border-[#374248]"
             )}>
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-3">
@@ -321,8 +336,8 @@ export const GeminiConfigPanel = ({ onConfigured, compact = false }: GeminiConfi
                                 {connectionStatus === 'connected'
                                     ? 'Gemini conectado correctamente'
                                     : connectionStatus === 'error'
-                                    ? 'Error de conexion'
-                                    : 'API Key no configurada'}
+                                        ? 'Error de conexion'
+                                        : 'API Key no configurada'}
                             </p>
                             {connectionStatus === 'connected' && (
                                 <p className="text-xs text-[#8696a0]">El bot puede usar IA para responder</p>
@@ -513,8 +528,8 @@ export const GeminiConfigPanel = ({ onConfigured, compact = false }: GeminiConfi
                         saveStatus === 'saved'
                             ? "bg-green-500 text-white"
                             : saveStatus === 'error'
-                            ? "bg-red-500 text-white"
-                            : "bg-[#00a884] text-white hover:bg-[#00bf96] disabled:opacity-50 disabled:cursor-not-allowed"
+                                ? "bg-red-500 text-white"
+                                : "bg-[#00a884] text-white hover:bg-[#00bf96] disabled:opacity-50 disabled:cursor-not-allowed"
                     )}
                 >
                     {saveStatus === 'saving' ? (

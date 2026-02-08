@@ -8,7 +8,7 @@ import {
     GraduationCap, Plus, Search, Edit2, Trash2,
     RefreshCw, X, Save, Phone, User, Calendar, MapPin, Mail,
     Music, School, FileText, AlertCircle, Users, Heart,
-    ChevronUp, ChevronDown, PhoneOff, Cake
+    ChevronUp, ChevronDown, PhoneOff, Cake, Check
 } from 'lucide-react';
 import { Alumno, AlumnoFormData, emptyAlumnoForm, alumnoToFormData, formDataToAlumno } from '../types/alumno';
 import { alumnosService } from '../services/firestore';
@@ -62,6 +62,11 @@ export const StudentsPage = () => {
     // Sorting state
     const [sortColumn, setSortColumn] = useState<SortColumn>(null);
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
+
+    // Inline editing state
+    const [editingCell, setEditingCell] = useState<{ studentId: string; field: string; originalValue: any } | null>(null);
+    const [tempEditValue, setTempEditValue] = useState<any>(null);
+    const [savingCell, setSavingCell] = useState(false);
 
     // Load students from Firestore
     const loadStudents = useCallback(async () => {
@@ -142,6 +147,71 @@ export const StudentsPage = () => {
             setError(err.message || 'Error al eliminar el alumno');
         } finally {
             setDeleting(false);
+        }
+    };
+
+    // Inline editing handlers
+    const handleCellDoubleClick = (student: Alumno, field: string) => {
+        // Allow editing for most fields
+        const editableFields = ['nombre', 'apellido', 'instrumento', 'tlf', 'tlf_madre', 'tlf_padre', 'email', 'edad'];
+        if (!editableFields.includes(field)) return;
+
+        const currentValue = student[field as keyof Alumno];
+        setEditingCell({ studentId: student.id, field, originalValue: currentValue });
+        setTempEditValue(currentValue || '');
+    };
+
+    const handleCellValueChange = (value: any) => {
+        setTempEditValue(value);
+    };
+
+    const handleAcceptEdit = async () => {
+        if (!editingCell) return;
+
+        setSavingCell(true);
+        setError(null);
+
+        try {
+            // Save immediately to Firebase
+            await alumnosService.update(editingCell.studentId, {
+                [editingCell.field]: tempEditValue
+            });
+
+            await loadStudents();
+            setEditingCell(null);
+            setTempEditValue(null);
+        } catch (err: any) {
+            console.error('Error saving cell:', err);
+            setError(err.message || 'Error al guardar el cambio');
+        } finally {
+            setSavingCell(false);
+        }
+    };
+
+    const handleCancelEdit = () => {
+        setEditingCell(null);
+        setTempEditValue(null);
+    };
+
+    const handleCellKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter') {
+            handleAcceptEdit();
+        } else if (e.key === 'Escape') {
+            handleCancelEdit();
+        }
+    };
+
+    const toggleActivoDoubleClick = async (studentId: string, currentValue: boolean) => {
+        setError(null);
+        try {
+            // Toggle and save immediately
+            await alumnosService.update(studentId, {
+                activo: !currentValue
+            });
+            await loadStudents();
+        } catch (err: any) {
+            console.error('Error toggling activo:', err);
+            setError(err.message || 'Error al cambiar el estado');
         }
     };
 
@@ -485,6 +555,8 @@ export const StudentsPage = () => {
         </th>
     );
 
+
+
     return (
         <div className="h-full overflow-y-auto p-4 sm:p-6">
             <div className="max-w-7xl mx-auto">
@@ -620,7 +692,83 @@ export const StudentsPage = () => {
                                                     )}
                                                     <div>
                                                         <div className="font-medium text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
-                                                            {student.nombre} {student.apellido}
+                                                            {/* Nombre - Editable */}
+                                                            {editingCell?.studentId === student.id && editingCell?.field === 'nombre' ? (
+                                                                <div className="flex items-center gap-1">
+                                                                    <input
+                                                                        type="text"
+                                                                        autoFocus
+                                                                        value={tempEditValue || ''}
+                                                                        onChange={(e) => handleCellValueChange(e.target.value)}
+                                                                        onKeyDown={handleCellKeyDown}
+                                                                        disabled={savingCell}
+                                                                        className="px-2 py-1 border-2 border-blue-500 rounded bg-white dark:bg-gray-700 text-sm font-medium w-24"
+                                                                    />
+                                                                    <button
+                                                                        onClick={handleAcceptEdit}
+                                                                        disabled={savingCell}
+                                                                        className="p-1 bg-green-500 hover:bg-green-600 text-white rounded disabled:opacity-50"
+                                                                        title="Aceptar (Enter)"
+                                                                    >
+                                                                        <Check className="w-3 h-3" />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={handleCancelEdit}
+                                                                        disabled={savingCell}
+                                                                        className="p-1 bg-red-500 hover:bg-red-600 text-white rounded disabled:opacity-50"
+                                                                        title="Cancelar (Esc)"
+                                                                    >
+                                                                        <X className="w-3 h-3" />
+                                                                    </button>
+                                                                </div>
+                                                            ) : (
+                                                                <span
+                                                                    onDoubleClick={() => handleCellDoubleClick(student, 'nombre')}
+                                                                    className="cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30 px-1 rounded transition"
+                                                                    title="Doble click para editar"
+                                                                >
+                                                                    {student.nombre}
+                                                                </span>
+                                                            )}
+                                                            {' '}
+                                                            {/* Apellido - Editable */}
+                                                            {editingCell?.studentId === student.id && editingCell?.field === 'apellido' ? (
+                                                                <div className="flex items-center gap-1">
+                                                                    <input
+                                                                        type="text"
+                                                                        autoFocus
+                                                                        value={tempEditValue || ''}
+                                                                        onChange={(e) => handleCellValueChange(e.target.value)}
+                                                                        onKeyDown={handleCellKeyDown}
+                                                                        disabled={savingCell}
+                                                                        className="px-2 py-1 border-2 border-blue-500 rounded bg-white dark:bg-gray-700 text-sm font-medium w-24"
+                                                                    />
+                                                                    <button
+                                                                        onClick={handleAcceptEdit}
+                                                                        disabled={savingCell}
+                                                                        className="p-1 bg-green-500 hover:bg-green-600 text-white rounded disabled:opacity-50"
+                                                                        title="Aceptar (Enter)"
+                                                                    >
+                                                                        <Check className="w-3 h-3" />
+                                                                    </button>
+                                                                    <button
+                                                                        onClick={handleCancelEdit}
+                                                                        disabled={savingCell}
+                                                                        className="p-1 bg-red-500 hover:bg-red-600 text-white rounded disabled:opacity-50"
+                                                                        title="Cancelar (Esc)"
+                                                                    >
+                                                                        <X className="w-3 h-3" />
+                                                                    </button>
+                                                                </div>
+                                                            ) : (
+                                                                <span
+                                                                    onDoubleClick={() => handleCellDoubleClick(student, 'apellido')}
+                                                                    className="cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30 px-1 rounded transition"
+                                                                    title="Doble click para editar"
+                                                                >
+                                                                    {student.apellido}
+                                                                </span>
+                                                            )}
                                                             {isBirthdayToday(student) && (
                                                                 <span
                                                                     className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-pink-100 dark:bg-pink-900/40 text-pink-600 dark:text-pink-400 text-xs font-medium animate-pulse"
@@ -667,9 +815,47 @@ export const StudentsPage = () => {
                                                 })()}
                                             </td>
                                             <td className="px-4 py-3">
-                                                <span className="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-medium">
-                                                    {getInstrumentName(student.instrumento)}
-                                                </span>
+                                                {editingCell?.studentId === student.id && editingCell?.field === 'instrumento' ? (
+                                                    <div className="flex items-center gap-1">
+                                                        <select
+                                                            autoFocus
+                                                            value={tempEditValue || ''}
+                                                            onChange={(e) => handleCellValueChange(e.target.value)}
+                                                            onKeyDown={handleCellKeyDown}
+                                                            disabled={savingCell}
+                                                            className="px-2 py-1 border-2 border-blue-500 rounded bg-white dark:bg-gray-700 text-xs"
+                                                        >
+                                                            <option value="">Sin asignar</option>
+                                                            {uniqueInstruments.map(inst => (
+                                                                <option key={inst} value={inst}>{inst}</option>
+                                                            ))}
+                                                        </select>
+                                                        <button
+                                                            onClick={handleAcceptEdit}
+                                                            disabled={savingCell}
+                                                            className="p-1 bg-green-500 hover:bg-green-600 text-white rounded disabled:opacity-50"
+                                                            title="Aceptar (Enter)"
+                                                        >
+                                                            <Check className="w-3 h-3" />
+                                                        </button>
+                                                        <button
+                                                            onClick={handleCancelEdit}
+                                                            disabled={savingCell}
+                                                            className="p-1 bg-red-500 hover:bg-red-600 text-white rounded disabled:opacity-50"
+                                                            title="Cancelar (Esc)"
+                                                        >
+                                                            <X className="w-3 h-3" />
+                                                        </button>
+                                                    </div>
+                                                ) : (
+                                                    <span
+                                                        onDoubleClick={() => handleCellDoubleClick(student, 'instrumento')}
+                                                        className="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-medium cursor-pointer hover:bg-purple-200 dark:hover:bg-purple-900/50 transition"
+                                                        title="Doble click para editar"
+                                                    >
+                                                        {getInstrumentName(student.instrumento)}
+                                                    </span>
+                                                )}
                                             </td>
                                             <td className="px-4 py-3 text-sm hidden md:table-cell">
                                                 {getPrimaryPhone(student) ? (
@@ -707,10 +893,15 @@ export const StudentsPage = () => {
                                             </td>
                                             <td className="px-4 py-3">
                                                 <div className="flex flex-wrap gap-1">
-                                                    <span className={`px-2 py-1 rounded-full text-xs font-medium ${student.activo
-                                                        ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400'
-                                                        : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400'
-                                                        }`}>
+                                                    {/* Activo Status - Double-click to toggle */}
+                                                    <span
+                                                        onDoubleClick={() => toggleActivoDoubleClick(student.id, student.activo)}
+                                                        className={`px-2 py-1 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition ${student.activo
+                                                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-200'
+                                                                : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200'
+                                                            }`}
+                                                        title="Doble click para cambiar estado"
+                                                    >
                                                         {student.activo ? 'Activo' : 'Inactivo'}
                                                     </span>
                                                     {hasIncompleteData(student) && (

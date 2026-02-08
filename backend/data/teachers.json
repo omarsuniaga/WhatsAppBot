@@ -1,0 +1,23 @@
+{
+  "entities": [
+    {
+      "firstName": "OMAR",
+      "lastName": "SUNIAGA",
+      "phone": "+18097176627",
+      "email": "osuniagarivera@gmail.com",
+      "status": "active",
+      "instruments": [
+        "Violin"
+      ],
+      "specializations": [
+        "Violin"
+      ],
+      "classGroupIds": [],
+      "tags": [],
+      "id": "tc_mxwvewbmzu3r",
+      "createdAt": 1769508120,
+      "updatedAt": 1769508120
+    }
+  ],
+  "lastUpdated": 1769508120
+}

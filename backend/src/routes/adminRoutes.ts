@@ -18,7 +18,8 @@ import {
     kbController,
     automationsController,
     whatsappSendController,
-    triggersController
+    triggersController,
+    aiController
 } from '../controllers';
 
 const router = Router();
@@ -174,5 +175,11 @@ router.get('/triggers/export', triggersController.exportTriggers);
 router.get('/triggers/stats', triggersController.getStats);
 router.post('/triggers/stats/reset', requireAdminAuth, triggersController.resetStats);
 router.post('/triggers/test', triggersController.testMessage);
+
+// ============================================================
+// AI FEATURES (Gemini-powered)
+// ============================================================
+router.post('/ai/generate-template', requireAdminAuth, aiController.generateTemplate);
+router.post('/ai/generate-variation', requireAdminAuth, aiController.generateVariation);
 
 export default router;

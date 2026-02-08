@@ -16,3 +16,4 @@ export * as kbController from './kbController';
 export * as automationsController from './automationsController';
 export * as whatsappSendController from './whatsappSendController';
 export * as triggersController from './triggersController';
+export * as aiController from './aiController';

@@ -9,17 +9,20 @@ import {
     BookOpen, Plus, Search, Edit2, Trash2, RefreshCw, X, Save,
     Users, Clock, MapPin, User, AlertCircle, AlertTriangle,
     ChevronUp, ChevronDown, Share2, Calendar, Music, CheckCircle,
-    UserPlus, Home, Sparkles, FileText, ClipboardCheck
+    UserPlus, Home, Sparkles, FileText, ClipboardCheck, Check, Undo2
 } from 'lucide-react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import { BulkImportModal } from '../components/classes/BulkImportModal';
 import {
     clasesService, Clase, ScheduleSlot, ConflictResult,
+    getTeacherIds, addTeacherToClass, removeTeacherFromClass, getPrimaryTeacherId,
     maestrosService, Maestro,
     salonesService, Salon,
     alumnosService, Alumno
 } from '../services/firestore';
 import { mergeClasses } from '../scripts/mergeClasses';
+import { InfoButton } from '../components/common/InfoButton';
+import { usePageInfo } from '../hooks/useViewInfo';
 
 // Constants
 const DAYS = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
@@ -42,12 +45,18 @@ const INSTRUMENT_SECTIONS: Record<string, string[]> = {
 type SortColumn = 'name' | 'teacher' | 'students' | 'schedule' | 'room' | 'status' | null;
 type SortDirection = 'asc' | 'desc';
 
+// Inline editing types
+type EditableField = 'name' | 'teacherId' | 'roomId' | 'status';
+type EditingCell = { classId: string; field: EditableField } | null;
+type PendingChanges = Record<string, Partial<Clase>>;
+
 // Quick add modal types
 type QuickAddType = 'teacher' | 'student' | 'room' | null;
 
 export const ClassesPage = () => {
     const navigate = useNavigate();
     const [searchParams, setSearchParams] = useSearchParams();
+    const pageInfo = usePageInfo('classes');
 
     // Data state
     const [classes, setClasses] = useState<Clase[]>([]);
@@ -103,6 +112,17 @@ export const ClassesPage = () => {
     const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
     const [deleting, setDeleting] = useState(false);
 
+    // Inline editing state
+    const [editingCell, setEditingCell] = useState<EditingCell>(null);
+    const [pendingChanges, setPendingChanges] = useState<PendingChanges>({});
+    const [savingInline, setSavingInline] = useState(false);
+    const fromDiagnostics = searchParams.get('source') === 'attendance-diagnostics';
+    const diagnosticReason = searchParams.get('reason') || '';
+    const diagnosticId = searchParams.get('diagId') || '';
+
+    const hasPendingChanges = Object.keys(pendingChanges).length > 0;
+    const pendingCount = Object.keys(pendingChanges).length;
+
     // Merge classes state
     const [selectedClassIds, setSelectedClassIds] = useState<Set<string>>(new Set());
     const [showMergeModal, setShowMergeModal] = useState(false);
@@ -141,12 +161,13 @@ export const ClassesPage = () => {
     const getTeacherName = (clase: Partial<Clase>): string => {
         // Try new field first
         if (clase.teacherId) {
-            const teacher = teachers.find(t => t.id === clase.teacherId);
+            // Search by uid first (correct way), then by document id (legacy)
+            const teacher = teachers.find(t => t.uid === clase.teacherId || t.id === clase.teacherId);
             if (teacher) return teacher.name;
         }
         // Try legacy profesor_id
         if (clase.profesor_id) {
-            const teacher = teachers.find(t => t.id === clase.profesor_id);
+            const teacher = teachers.find(t => t.uid === clase.profesor_id || t.id === clase.profesor_id);
             if (teacher) return teacher.name;
         }
         // Try legacy profesor_nombre
@@ -155,7 +176,7 @@ export const ClassesPage = () => {
         }
         // Try legacy array (first teacher)
         if (clase.profesor_ids && clase.profesor_ids.length > 0) {
-            const teacher = teachers.find(t => t.id === clase.profesor_ids![0]);
+            const teacher = teachers.find(t => t.uid === clase.profesor_ids![0] || t.id === clase.profesor_ids![0]);
             if (teacher) return teacher.name;
         }
         if (clase.profesor_nombres && clase.profesor_nombres.length > 0) {
@@ -165,7 +186,9 @@ export const ClassesPage = () => {
     };
 
     const getTeacherId = (clase: Partial<Clase>): string => {
-        return clase.teacherId || clase.profesor_id || clase.profesor_ids?.[0] || '';
+        const tid = clase.teacherId;
+        const resolved = Array.isArray(tid) ? tid[0] : tid;
+        return resolved || clase.profesor_id || clase.profesor_ids?.[0] || '';
     };
 
     // Legacy-compatible room helper
@@ -234,6 +257,60 @@ export const ClassesPage = () => {
         if (clase.activo === true) return 'active';
         if (clase.activo === false) return 'inactive';
         return 'active';
+    };
+
+    // Inline editing helpers
+    const getDisplayValue = (clase: Clase, field: EditableField): string => {
+        const changes = pendingChanges[clase.id];
+        if (changes && field in changes) {
+            const val = changes[field];
+            return String(val ?? '');
+        }
+        if (field === 'name') return getClassName(clase);
+        if (field === 'teacherId') return String(clase.teacherId || '');
+        if (field === 'roomId') return String(clase.roomId || '');
+        if (field === 'status') return getClassStatus(clase);
+        return '';
+    };
+
+    const setCellValue = (classId: string, field: EditableField, value: any) => {
+        setPendingChanges(prev => {
+            const existing = prev[classId] || {};
+            return { ...prev, [classId]: { ...existing, [field]: value } };
+        });
+    };
+
+    const startEditing = (classId: string, field: EditableField) => {
+        setEditingCell({ classId, field });
+    };
+
+    const stopEditing = () => {
+        setEditingCell(null);
+    };
+
+    const discardChanges = () => {
+        setPendingChanges({});
+        setEditingCell(null);
+    };
+
+    const saveAllChanges = async () => {
+        if (!hasPendingChanges) return;
+        setSavingInline(true);
+        setError(null);
+        try {
+            const promises = Object.entries(pendingChanges).map(([classId, changes]) =>
+                clasesService.update(classId, changes)
+            );
+            await Promise.all(promises);
+            setPendingChanges({});
+            setEditingCell(null);
+            await loadData();
+        } catch (err: any) {
+            console.error('Error saving inline changes:', err);
+            setError(err.message || 'Error al guardar los cambios');
+        } finally {
+            setSavingInline(false);
+        }
     };
 
     // Alumno helpers
@@ -389,11 +466,23 @@ export const ClassesPage = () => {
             if (classToEdit) {
                 setEditingClass(classToEdit);
                 setShowModal(true);
-                // Remove the query parameter after opening
-                setSearchParams({});
+                // Remove edit parameter after opening, keep contextual filters
+                setSearchParams(prev => {
+                    const next = new URLSearchParams(prev);
+                    next.delete('edit');
+                    return next;
+                });
             }
         }
     }, [searchParams, classes, showModal, setSearchParams]);
+
+    // Apply contextual search when ?search=... is present
+    useEffect(() => {
+        const urlSearch = searchParams.get('search');
+        if (urlSearch && urlSearch !== searchTerm) {
+            setSearchTerm(urlSearch);
+        }
+    }, [searchParams, searchTerm]);
 
     // Modal handlers
     const openNewClass = () => {
@@ -488,12 +577,6 @@ export const ClassesPage = () => {
     };
 
     // Room management modal handlers
-    const openRoomsModal = (clase: Clase) => {
-        setManagingClassForRoom({ ...clase });
-        setRoomSearchTerm('');
-        setShowRoomsModal(true);
-    };
-
     const closeRoomsModal = () => {
         setShowRoomsModal(false);
         setManagingClassForRoom(null);
@@ -730,7 +813,7 @@ export const ClassesPage = () => {
 
         try {
             if (quickAddType === 'teacher') {
-                const id = await maestrosService.create({
+                const docId = await maestrosService.create({
                     name: quickAddData.name,
                     primaryInstrument: quickAddData.instrument || '',
                     status: 'active',
@@ -740,8 +823,20 @@ export const ClassesPage = () => {
                     studentIds: [],
                     schedule: { slots: [] }
                 } as any);
+
+                // Reload data to get the created teacher with uid
                 await loadData();
-                updateField('teacherId', id);
+
+                // Find the created teacher and use its uid (if available)
+                const createdTeacher = teachers.find(t => t.id === docId);
+                const teacherIdToUse = createdTeacher?.uid || docId;
+
+                // Warn if no uid
+                if (!createdTeacher?.uid) {
+                    console.warn(`Teacher created without uid. Using document ID as fallback: ${docId}`);
+                }
+
+                updateField('teacherId', teacherIdToUse);
             } else if (quickAddType === 'student') {
                 const id = await alumnosService.create({
                     nombre: quickAddData.name,
@@ -767,20 +862,8 @@ export const ClassesPage = () => {
         }
     };
 
-    // Get status badge
-    const getStatusBadge = (status: string) => {
-        const config = STATUS_OPTIONS.find(s => s.value === status) || STATUS_OPTIONS[1];
-        const colors = {
-            green: 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300',
-            gray: 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400',
-            red: 'bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300'
-        };
-        return (
-            <span className={`px-2 py-0.5 rounded text-xs font-medium ${colors[config.color as keyof typeof colors]}`}>
-                {config.label}
-            </span>
-        );
-    };
+    // Get status badge helper
+    // Note: Inline status editing is now implemented via toggle, but keeping this for reference during development
 
     return (
         <div className="h-full overflow-y-auto p-4 sm:p-6">
@@ -797,6 +880,13 @@ export const ClassesPage = () => {
                                 {classes.length} clases registradas
                             </p>
                         </div>
+                        {pageInfo.hasInfo && (
+                            <InfoButton
+                                title={pageInfo.title}
+                                description={pageInfo.description}
+                                tips={pageInfo.tips}
+                            />
+                        )}
                     </div>
                     <div className="flex flex-wrap items-center gap-2">
                         <button
@@ -833,6 +923,27 @@ export const ClassesPage = () => {
                         </button>
                     </div>
                 </div>
+
+                {fromDiagnostics && (
+                    <div className="mb-4 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-800 dark:text-indigo-300 text-sm">
+                        Contexto: abierto desde diagnostico de asistencias. Revisa docente, horario y datos de contacto asociados a esta clase.
+                        {diagnosticReason && <span className="block mt-1 font-medium">Motivo: {diagnosticReason}</span>}
+                        <button
+                            onClick={() => {
+                                const params = new URLSearchParams({
+                                    source: 'fix-return',
+                                    focus: 'contact-diagnostics'
+                                });
+                                if (diagnosticReason) params.set('reason', diagnosticReason);
+                                if (diagnosticId) params.set('diagId', diagnosticId);
+                                navigate(`/attendance?${params.toString()}`);
+                            }}
+                            className="mt-2 inline-flex items-center px-3 py-1.5 rounded bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition-colors"
+                        >
+                            Volver a Diagnostico
+                        </button>
+                    </div>
+                )}
 
                 {/* Error Alert */}
                 {error && (
@@ -943,10 +1054,32 @@ export const ClassesPage = () => {
                                                     <div className="w-10 h-10 rounded-lg bg-indigo-100 dark:bg-indigo-900/30 flex items-center justify-center">
                                                         <Music className="w-5 h-5 text-indigo-500" />
                                                     </div>
-                                                    <div>
-                                                        <div className="font-medium text-gray-800 dark:text-gray-200">
-                                                            {clase.name}
-                                                        </div>
+                                                    <div className="flex-1">
+                                                        {editingCell?.classId === clase.id && editingCell?.field === 'name' ? (
+                                                            <input
+                                                                autoFocus
+                                                                type="text"
+                                                                defaultValue={getDisplayValue(clase, 'name')}
+                                                                onBlur={(e) => {
+                                                                    const val = e.target.value.trim();
+                                                                    if (val && val !== clase.name) setCellValue(clase.id, 'name', val);
+                                                                    stopEditing();
+                                                                }}
+                                                                onKeyDown={(e) => {
+                                                                    if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                                                    if (e.key === 'Escape') stopEditing();
+                                                                }}
+                                                                className="w-full px-2 py-0.5 text-sm border border-blue-400 rounded bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                            />
+                                                        ) : (
+                                                            <div
+                                                                className={`font-medium text-gray-800 dark:text-gray-200 cursor-pointer rounded px-1 -mx-1 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors ${pendingChanges[clase.id]?.name !== undefined ? 'bg-yellow-50 dark:bg-yellow-900/20 ring-1 ring-yellow-300 dark:ring-yellow-700' : ''}`}
+                                                                onDoubleClick={() => startEditing(clase.id, 'name')}
+                                                                title="Doble click para editar"
+                                                            >
+                                                                {getDisplayValue(clase, 'name')}
+                                                            </div>
+                                                        )}
                                                         {(() => {
                                                             const instruments = clase.instruments?.length
                                                                 ? clase.instruments.join(', ')
@@ -961,17 +1094,54 @@ export const ClassesPage = () => {
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3 hidden md:table-cell">
-                                                <div className="flex items-center gap-2">
-                                                    <User className="w-4 h-4 text-gray-400" />
-                                                    <span className="text-sm text-gray-600 dark:text-gray-400">
-                                                        {getTeacherName(clase)}
-                                                    </span>
-                                                    {clase.sharedWith && clase.sharedWith.length > 0 && (
-                                                        <span className="text-xs text-indigo-500" title="Clase compartida">
-                                                            <Share2 className="w-3 h-3" />
+                                                {editingCell?.classId === clase.id && editingCell?.field === 'teacherId' ? (
+                                                    <select
+                                                        autoFocus
+                                                        defaultValue={getDisplayValue(clase, 'teacherId')}
+                                                        onBlur={(e) => {
+                                                            const val = e.target.value.trim();
+                                                            if (val && val !== clase.teacherId) setCellValue(clase.id, 'teacherId', val);
+                                                            stopEditing();
+                                                        }}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value.trim();
+                                                            if (val && val !== clase.teacherId) setCellValue(clase.id, 'teacherId', val);
+                                                            stopEditing();
+                                                        }}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Escape') stopEditing();
+                                                        }}
+                                                        className="px-2 py-0.5 text-sm border border-blue-400 rounded bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                    >
+                                                        <option value="">Sin maestro</option>
+                                                        {teachers
+                                                            .filter(t => t.status === 'active')
+                                                            .map(t => (
+                                                                <option
+                                                                    key={t.id}
+                                                                    value={t.uid || t.id}
+                                                                >
+                                                                    {t.name}{!t.uid ? ' ⚠️' : ''}
+                                                                </option>
+                                                            ))}
+                                                    </select>
+                                                ) : (
+                                                    <div
+                                                        className={`flex items-center gap-2 cursor-pointer rounded px-1 -mx-1 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors ${pendingChanges[clase.id]?.teacherId !== undefined ? 'bg-yellow-50 dark:bg-yellow-900/20 ring-1 ring-yellow-300 dark:ring-yellow-700' : ''}`}
+                                                        onDoubleClick={() => startEditing(clase.id, 'teacherId')}
+                                                        title="Doble click para editar"
+                                                    >
+                                                        <User className="w-4 h-4 text-gray-400" />
+                                                        <span className="text-sm text-gray-600 dark:text-gray-400">
+                                                            {getTeacherName(clase)}
                                                         </span>
-                                                    )}
-                                                </div>
+                                                        {clase.sharedWith && clase.sharedWith.length > 0 && (
+                                                            <span className="text-xs text-indigo-500" title="Clase compartida">
+                                                                <Share2 className="w-3 h-3" />
+                                                            </span>
+                                                        )}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td
                                                 className="px-4 py-3 hidden sm:table-cell cursor-pointer group"
@@ -992,23 +1162,50 @@ export const ClassesPage = () => {
                                                     </span>
                                                 </div>
                                             </td>
-                                            <td
-                                                className="px-4 py-3 hidden md:table-cell cursor-pointer group"
-                                                onClick={() => openRoomsModal(clase)}
-                                            >
-                                                <div className="flex items-center gap-2 group-hover:text-indigo-500 transition-colors">
-                                                    <MapPin className="w-4 h-4 text-gray-400 group-hover:text-indigo-400" />
-                                                    <div className="flex flex-col">
-                                                        <span className="text-sm text-gray-600 dark:text-gray-400 font-medium whitespace-nowrap">
-                                                            {getRoomName(clase)}
-                                                        </span>
-                                                        {clase.roomId && rooms.find(r => r.id === clase.roomId)?.capacidad && (
-                                                            <span className="text-[10px] text-gray-400">
-                                                                Cap: {rooms.find(r => r.id === clase.roomId)?.capacidad} pers.
+                                            <td className="px-4 py-3 hidden md:table-cell">
+                                                {editingCell?.classId === clase.id && editingCell?.field === 'roomId' ? (
+                                                    <select
+                                                        autoFocus
+                                                        defaultValue={getDisplayValue(clase, 'roomId')}
+                                                        onBlur={(e) => {
+                                                            const val = e.target.value.trim();
+                                                            if (val && val !== clase.roomId) setCellValue(clase.id, 'roomId', val);
+                                                            stopEditing();
+                                                        }}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value.trim();
+                                                            if (val && val !== clase.roomId) setCellValue(clase.id, 'roomId', val);
+                                                            stopEditing();
+                                                        }}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Escape') stopEditing();
+                                                        }}
+                                                        className="px-2 py-0.5 text-sm border border-blue-400 rounded bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                    >
+                                                        <option value="">Sin salón</option>
+                                                        {rooms.map(r => (
+                                                            <option key={r.id} value={r.id}>{r.nombre || r.name}</option>
+                                                        ))}
+                                                    </select>
+                                                ) : (
+                                                    <div
+                                                        className={`flex items-center gap-2 cursor-pointer rounded px-1 -mx-1 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors group-hover:text-indigo-500 ${pendingChanges[clase.id]?.roomId !== undefined ? 'bg-yellow-50 dark:bg-yellow-900/20 ring-1 ring-yellow-300 dark:ring-yellow-700' : ''}`}
+                                                        onDoubleClick={() => startEditing(clase.id, 'roomId')}
+                                                        title="Doble click para editar"
+                                                    >
+                                                        <MapPin className="w-4 h-4 text-gray-400 group-hover:text-indigo-400" />
+                                                        <div className="flex flex-col">
+                                                            <span className="text-sm text-gray-600 dark:text-gray-400 font-medium whitespace-nowrap">
+                                                                {getRoomName(clase)}
                                                             </span>
-                                                        )}
+                                                            {clase.roomId && rooms.find(r => r.id === clase.roomId)?.capacidad && (
+                                                                <span className="text-[10px] text-gray-400">
+                                                                    Cap: {rooms.find(r => r.id === clase.roomId)?.capacidad} pers.
+                                                                </span>
+                                                            )}
+                                                        </div>
                                                     </div>
-                                                </div>
+                                                )}
                                             </td>
                                             <td className="px-4 py-3 hidden md:table-cell">
                                                 <div className="flex items-center gap-2">
@@ -1019,7 +1216,26 @@ export const ClassesPage = () => {
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3">
-                                                {getStatusBadge(getClassStatus(clase))}
+                                                {(() => {
+                                                    const currentStatus = String(pendingChanges[clase.id]?.status || getClassStatus(clase));
+                                                    return (
+                                                        <span
+                                                            className={`px-2 py-0.5 rounded text-xs font-medium cursor-pointer transition-colors ${pendingChanges[clase.id]?.status !== undefined
+                                                                ? 'bg-yellow-50 dark:bg-yellow-900/20 ring-1 ring-yellow-300 dark:ring-yellow-700 text-yellow-700 dark:text-yellow-300'
+                                                                : currentStatus === 'active'
+                                                                    ? 'bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                                                                    : 'bg-gray-100 dark:bg-gray-700 text-gray-600 dark:text-gray-400 hover:bg-blue-50 dark:hover:bg-blue-900/20'
+                                                                }`}
+                                                            onDoubleClick={() => {
+                                                                const newStatus = currentStatus === 'active' ? 'inactive' : 'active';
+                                                                setCellValue(clase.id, 'status', newStatus);
+                                                            }}
+                                                            title="Doble click para alternar"
+                                                        >
+                                                            {currentStatus === 'active' ? 'Activa' : 'Inactiva'}
+                                                        </span>
+                                                    );
+                                                })()}
                                             </td>
                                             <td className="px-4 py-3 text-right">
                                                 <div className="flex items-center justify-end gap-1">
@@ -1208,19 +1424,54 @@ export const ClassesPage = () => {
                                         </div>
 
                                         <div>
-                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                                                Maestro Titular *
+                                            <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                                                Maestro(s) Asignado(s) *
                                             </label>
-                                            <div className="flex gap-2">
+
+                                            {/* Primary Teacher Selector */}
+                                            <div className="flex gap-2 mb-3">
                                                 <select
-                                                    value={editingClass.teacherId || ''}
-                                                    onChange={(e) => updateField('teacherId', e.target.value)}
+                                                    value={(() => {
+                                                        const teacherIds = getTeacherIds(editingClass);
+                                                        if (teacherIds.length === 0) return '';
+
+                                                        const firstTeacherId = teacherIds[0];
+                                                        // Find teacher by uid or document id (for legacy data)
+                                                        const teacher = teachers.find(t =>
+                                                            t.uid === firstTeacherId || t.id === firstTeacherId
+                                                        );
+
+                                                        // Return the uid if found, otherwise return the stored value
+                                                        return teacher?.uid || firstTeacherId;
+                                                    })()}
+                                                    onChange={(e) => {
+                                                        const selectedUid = e.target.value;
+                                                        if (selectedUid) {
+                                                            // Get current teachers
+                                                            const currentIds = getTeacherIds(editingClass);
+                                                            // Keep other teachers, replace first
+                                                            const otherTeachers = currentIds.slice(1);
+                                                            const newTeacherId = otherTeachers.length > 0
+                                                                ? [selectedUid, ...otherTeachers]
+                                                                : selectedUid;
+                                                            updateField('teacherId', newTeacherId);
+                                                        } else {
+                                                            updateField('teacherId', '');
+                                                        }
+                                                    }}
                                                     className="flex-1 px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200"
                                                 >
-                                                    <option value="">Seleccionar maestro...</option>
-                                                    {teachers.filter(t => t.status === 'active').map(t => (
-                                                        <option key={t.id} value={t.id}>{t.name}</option>
-                                                    ))}
+                                                    <option value="">Seleccionar maestro principal...</option>
+                                                    {teachers
+                                                        .filter(t => t.status === 'active')
+                                                        .map(t => (
+                                                            <option
+                                                                key={t.id}
+                                                                value={t.uid || t.id}
+                                                            >
+                                                                {t.name}{!t.uid ? ' ⚠️ (sin uid)' : ''}
+                                                            </option>
+                                                        ))}
                                                 </select>
                                                 <button
                                                     type="button"
@@ -1231,6 +1482,67 @@ export const ClassesPage = () => {
                                                     <UserPlus className="w-4 h-4 text-gray-600 dark:text-gray-400" />
                                                 </button>
                                             </div>
+
+                                            {/* Additional Teachers (Co-Teachers) */}
+                                            {(() => {
+                                                const primaryTeacherId = getPrimaryTeacherId(editingClass);
+                                                if (!primaryTeacherId) return null;
+
+                                                return (
+                                                    <div className="mt-3 p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg border border-gray-200 dark:border-gray-700">
+                                                        <label className="block text-xs font-semibold text-gray-600 dark:text-gray-400 mb-2 uppercase tracking-wide">
+                                                            Co-Maestros (Opcional)
+                                                        </label>
+                                                        <div className="space-y-1.5 max-h-40 overflow-y-auto">
+                                                            {teachers
+                                                                .filter(t => t.status === 'active' && t.uid && t.uid !== primaryTeacherId) // Solo maestros con uid
+                                                                .map(teacher => {
+                                                                    const teacherUid = teacher.uid!; // Ya validamos que existe
+                                                                    const currentIds = getTeacherIds(editingClass);
+                                                                    const isAssigned = currentIds.includes(teacherUid);
+
+                                                                    return (
+                                                                        <label
+                                                                            key={teacher.id}
+                                                                            className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${isAssigned
+                                                                                ? 'bg-indigo-50 dark:bg-indigo-900/20 border border-indigo-200 dark:border-indigo-800'
+                                                                                : 'hover:bg-gray-100 dark:hover:bg-gray-700/50'
+                                                                                }`}
+                                                                        >
+                                                                            <input
+                                                                                type="checkbox"
+                                                                                checked={isAssigned}
+                                                                                onChange={() => {
+                                                                                    const newTeacherId = isAssigned
+                                                                                        ? removeTeacherFromClass(editingClass, teacherUid)
+                                                                                        : addTeacherToClass(editingClass, teacherUid);
+                                                                                    updateField('teacherId', newTeacherId);
+                                                                                }}
+                                                                                className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                                                                            />
+                                                                            <div className="flex-1">
+                                                                                <span className="text-sm font-medium text-gray-700 dark:text-gray-200">
+                                                                                    {teacher.name}
+                                                                                </span>
+                                                                                {teacher.primaryInstrument && (
+                                                                                    <span className="ml-2 text-xs text-gray-500">
+                                                                                        {teacher.primaryInstrument}
+                                                                                    </span>
+                                                                                )}
+                                                                            </div>
+                                                                            {isAssigned && (
+                                                                                <CheckCircle className="w-4 h-4 text-indigo-500" />
+                                                                            )}
+                                                                        </label>
+                                                                    );
+                                                                })}
+                                                        </div>
+                                                        <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                                                            Los co-maestros pueden registrar asistencia y observaciones
+                                                        </p>
+                                                    </div>
+                                                );
+                                            })()}
                                         </div>
 
                                         <div>
@@ -2134,6 +2446,41 @@ export const ClassesPage = () => {
                             setShowImportModal(false);
                         }}
                     />
+                )}
+
+                {/* Floating Save Bar for Inline Edits */}
+                {hasPendingChanges && (
+                    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-in slide-in-from-bottom-4 duration-300">
+                        <div className="flex items-center gap-3 px-5 py-3 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 rounded-xl shadow-2xl border border-gray-700 dark:border-gray-300">
+                            <div className="flex items-center gap-2 text-sm">
+                                <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                                <span className="font-medium">
+                                    {pendingCount} clase{pendingCount > 1 ? 's' : ''} modificada{pendingCount > 1 ? 's' : ''}
+                                </span>
+                            </div>
+                            <div className="w-px h-6 bg-gray-600 dark:bg-gray-400" />
+                            <button
+                                onClick={discardChanges}
+                                disabled={savingInline}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-300 dark:text-gray-600 hover:text-white dark:hover:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-200 rounded-lg transition-colors"
+                            >
+                                <Undo2 className="w-4 h-4" />
+                                Descartar
+                            </button>
+                            <button
+                                onClick={saveAllChanges}
+                                disabled={savingInline}
+                                className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-lg font-medium transition-colors"
+                            >
+                                {savingInline ? (
+                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <Check className="w-4 h-4" />
+                                )}
+                                {savingInline ? 'Guardando...' : 'Guardar cambios'}
+                            </button>
+                        </div>
+                    </div>
                 )}
             </div>
         </div >

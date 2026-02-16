@@ -7,9 +7,10 @@
  * - Configure trigger behavior (exact match, contains, regex)
  */
 
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { EventEmitter } from 'events';
+import { writeFileSyncAtomic } from '../utils/atomicWrite';
 
 export interface Trigger {
     id: string;
@@ -43,15 +44,38 @@ export interface TriggerConfig {
 }
 
 const CONFIG_PATH = join(process.cwd(), 'data', 'trigger-config.json');
+const KB_PATH = join(process.cwd(), 'data', 'knowledge-base.json');
+
+interface KnowledgeCategory {
+    id: string;
+    name: string;
+    isActive?: boolean;
+}
+
+interface KnowledgeFaq {
+    category?: string;
+    keywords?: string[];
+    questions?: string[];
+    approved?: boolean;
+}
+
+interface KnowledgeBaseRaw {
+    categories?: KnowledgeCategory[];
+    faqs?: KnowledgeFaq[];
+}
 
 export class TriggerService extends EventEmitter {
     private static instance: TriggerService;
     private config: TriggerConfig;
     private cooldowns: Map<string, number> = new Map(); // jid -> last activation time
+    private statsDirty: boolean = false;
+    private statsSaveTimeout: ReturnType<typeof setTimeout> | null = null;
 
     private constructor() {
         super();
         this.config = this.loadConfig();
+        this.ensureDynamicTriggerSeed();
+        this.alignTriggersWithKnowledgeBase();
     }
 
     static getInstance(): TriggerService {
@@ -84,68 +108,8 @@ export class TriggerService extends EventEmitter {
             version: 1,
             listenerEnabled: true,
             requireTrigger: false,
-            triggers: [
-                {
-                    id: 'default-hola',
-                    keyword: 'hola',
-                    matchType: 'contains',
-                    caseSensitive: false,
-                    enabled: true,
-                    description: 'Saludo basico',
-                    category: 'saludo',
-                    priority: 1,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                },
-                {
-                    id: 'default-info',
-                    keyword: 'informacion',
-                    matchType: 'contains',
-                    caseSensitive: false,
-                    enabled: true,
-                    description: 'Solicitud de informacion',
-                    category: 'consulta',
-                    priority: 1,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                },
-                {
-                    id: 'default-ayuda',
-                    keyword: 'ayuda',
-                    matchType: 'contains',
-                    caseSensitive: false,
-                    enabled: true,
-                    description: 'Solicitud de ayuda',
-                    category: 'soporte',
-                    priority: 1,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                },
-                {
-                    id: 'default-precio',
-                    keyword: 'precio',
-                    matchType: 'contains',
-                    caseSensitive: false,
-                    enabled: true,
-                    description: 'Consulta de precios',
-                    category: 'ventas',
-                    priority: 1,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                },
-                {
-                    id: 'default-horario',
-                    keyword: 'horario',
-                    matchType: 'contains',
-                    caseSensitive: false,
-                    enabled: true,
-                    description: 'Consulta de horarios',
-                    category: 'info',
-                    priority: 1,
-                    createdAt: new Date().toISOString(),
-                    updatedAt: new Date().toISOString()
-                }
-            ],
+            // Generated dynamically from knowledge-base.json when empty
+            triggers: [],
             settings: {
                 defaultMatchType: 'contains',
                 defaultCaseSensitive: false,
@@ -160,6 +124,146 @@ export class TriggerService extends EventEmitter {
         };
     }
 
+    private shouldRegenerateLegacyDefaults(triggers: Trigger[]): boolean {
+        if (triggers.length === 0) return true;
+        return triggers.every(trigger => trigger.id.startsWith('default-'));
+    }
+
+    private buildDynamicSeedTriggers(kb: KnowledgeBaseRaw): Trigger[] {
+        const now = new Date().toISOString();
+        const categories = (kb.categories || []).filter(c => c?.id && c.isActive !== false);
+        const fallbackCategory = categories.find(c => c.id === 'general')?.id || categories[0]?.id || 'general';
+
+        const keywordToCategory = new Map<string, string>();
+        for (const faq of kb.faqs || []) {
+            if (!faq || faq.approved === false) continue;
+            const category = faq.category || fallbackCategory;
+            for (const kw of faq.keywords || []) {
+                const normalized = this.normalizeText(kw);
+                if (!normalized) continue;
+                if (!keywordToCategory.has(normalized)) {
+                    keywordToCategory.set(normalized, category);
+                }
+            }
+        }
+
+        // Build seed triggers from KB keywords (bounded to keep config manageable)
+        const maxSeedTriggers = 30;
+        const seedEntries = Array.from(keywordToCategory.entries()).slice(0, maxSeedTriggers);
+
+        return seedEntries.map(([keyword, category], index) => ({
+            id: `kb-seed-${Date.now()}-${index}`,
+            keyword,
+            matchType: 'contains',
+            caseSensitive: false,
+            enabled: true,
+            description: `Auto-generated from KB (${category})`,
+            category: category || fallbackCategory,
+            priority: 1,
+            createdAt: now,
+            updatedAt: now
+        }));
+    }
+
+    private ensureDynamicTriggerSeed(): void {
+        const kb = this.loadKnowledgeBaseRaw();
+        if (!kb) return;
+
+        if (!this.shouldRegenerateLegacyDefaults(this.config.triggers)) {
+            return;
+        }
+
+        const generated = this.buildDynamicSeedTriggers(kb);
+        if (generated.length === 0) return;
+
+        this.config.triggers = generated;
+        this.saveConfig();
+        this.emit('triggers:seeded-from-kb', {
+            count: generated.length
+        });
+    }
+
+    private normalizeText(value: string): string {
+        return value
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .toLowerCase()
+            .trim();
+    }
+
+    private loadKnowledgeBaseRaw(): KnowledgeBaseRaw | null {
+        try {
+            if (!existsSync(KB_PATH)) return null;
+            const raw = JSON.parse(readFileSync(KB_PATH, 'utf-8'));
+            return raw && typeof raw === 'object' ? raw as KnowledgeBaseRaw : null;
+        } catch {
+            return null;
+        }
+    }
+
+    /**
+     * Align trigger.category values to real Knowledge Base categories.
+     * This keeps trigger-based context hints consistent with KB search categories.
+     */
+    private alignTriggersWithKnowledgeBase(): void {
+        const kb = this.loadKnowledgeBaseRaw();
+        if (!kb?.categories?.length) return;
+
+        const activeCategories = kb.categories
+            .filter(c => c && c.id && c.isActive !== false);
+        if (activeCategories.length === 0) return;
+
+        const aliasToCategoryId = new Map<string, string>();
+        const categoryIds = new Set<string>();
+        for (const category of activeCategories) {
+            categoryIds.add(category.id);
+            aliasToCategoryId.set(this.normalizeText(category.id), category.id);
+            aliasToCategoryId.set(this.normalizeText(category.name || category.id), category.id);
+        }
+
+        const keywordToCategoryId = new Map<string, string>();
+        for (const faq of kb.faqs || []) {
+            if (!faq || faq.approved === false || !faq.category || !categoryIds.has(faq.category)) continue;
+            for (const keyword of faq.keywords || []) {
+                const normalizedKeyword = this.normalizeText(keyword);
+                if (normalizedKeyword) {
+                    keywordToCategoryId.set(normalizedKeyword, faq.category);
+                }
+            }
+        }
+
+        const fallbackCategory = categoryIds.has('general') ? 'general' : activeCategories[0].id;
+        let changed = false;
+
+        this.config.triggers = this.config.triggers.map(trigger => {
+            const currentCategory = trigger.category?.trim() || '';
+            const normalizedCurrent = this.normalizeText(currentCategory);
+            const normalizedKeyword = this.normalizeText(trigger.keyword);
+
+            const byAlias = normalizedCurrent ? aliasToCategoryId.get(normalizedCurrent) : undefined;
+            const byKeyword = normalizedKeyword ? keywordToCategoryId.get(normalizedKeyword) : undefined;
+            const alignedCategory = byAlias || byKeyword || fallbackCategory;
+
+            if (trigger.category !== alignedCategory) {
+                changed = true;
+                return {
+                    ...trigger,
+                    category: alignedCategory,
+                    updatedAt: new Date().toISOString()
+                };
+            }
+            return trigger;
+        });
+
+        if (changed) {
+            this.saveConfig();
+            this.emit('triggers:categories-aligned', {
+                categories: Array.from(categoryIds),
+                fallbackCategory
+            });
+        }
+    }
+
     private saveConfig(): void {
         try {
             // Ensure directory exists
@@ -167,15 +271,71 @@ export class TriggerService extends EventEmitter {
             if (!existsSync(dir)) {
                 mkdirSync(dir, { recursive: true });
             }
-            writeFileSync(CONFIG_PATH, JSON.stringify(this.config, null, 2));
+            writeFileSyncAtomic(CONFIG_PATH, JSON.stringify(this.config, null, 2));
         } catch (error) {
             console.error('[TriggerService] Error saving config:', error);
         }
     }
 
+    /**
+     * Debounced save for stats updates — avoids sync disk write on every matched trigger
+     */
+    private deferredStatsSave(): void {
+        if (this.statsSaveTimeout) {
+            clearTimeout(this.statsSaveTimeout);
+        }
+        this.statsSaveTimeout = setTimeout(() => {
+            this.saveConfig();
+        }, 5000);
+    }
+
     // ==========================================
     // Listener Control
     // ==========================================
+
+    /**
+     * Analyze message context by matching active triggers without side effects.
+     * This does NOT update cooldowns or stats.
+     */
+    analyzeContext(message: string): {
+        matchedTriggers: Trigger[];
+        categories: string[];
+        keywords: string[];
+        triggerIds: string[];
+    } {
+        if (!this.config.listenerEnabled) {
+            return { matchedTriggers: [], categories: [], keywords: [], triggerIds: [] };
+        }
+
+        const activeTriggers = this.config.triggers.filter(t => t.enabled);
+        const matched = activeTriggers
+            .filter(trigger => this.matchesTrigger(message, trigger))
+            .sort((a, b) => b.priority - a.priority)
+            .slice(0, this.config.settings.maxTriggersPerMessage);
+
+        const categories = Array.from(
+            new Set(
+                matched
+                    .map(t => (t.category || '').trim())
+                    .filter(Boolean)
+            )
+        );
+        const keywords = Array.from(
+            new Set(
+                matched
+                    .map(t => t.keyword.trim())
+                    .filter(Boolean)
+            )
+        );
+        const triggerIds = matched.map(t => t.id);
+
+        return {
+            matchedTriggers: matched,
+            categories,
+            keywords,
+            triggerIds
+        };
+    }
 
     /**
      * Check if the message listener is enabled
@@ -246,10 +406,10 @@ export class TriggerService extends EventEmitter {
             // Update cooldown
             this.cooldowns.set(jid, Date.now());
 
-            // Update global stats
+            // Update global stats (deferred save to avoid sync write on every message)
             this.config.stats.totalActivations++;
             this.config.stats.lastActivation = new Date().toISOString();
-            this.saveConfig();
+            this.deferredStatsSave();
 
             // Emit event
             this.emit('trigger:matched', { jid, triggers: matched, message });

@@ -53,7 +53,8 @@ export const AdminLayout = ({ onBack }: AdminLayoutProps) => {
         { path: '/classes', label: 'Clases', icon: BookMarked },
         { path: '/rooms', label: 'Salones', icon: DoorOpen },
         { path: '/schedule', label: 'Horarios', icon: Calendar },
-        { path: '/attendance/control', label: 'Control Asistencias', icon: ShieldAlert },
+        { path: '/attendance', label: 'Panel Asistencias', icon: ShieldAlert },
+        { path: '/attendance/register', label: 'Registrar Asistencia', icon: Users },
     ];
 
     const automationItems = [

@@ -1,10 +1,11 @@
+﻿import { Request, Response } from 'express';
+import Logger from '../services/loggerService';
 /**
  * Escalation Controller
- * API endpoints para gestión de tickets y administradores
+ * API endpoints para gestiÃ³n de tickets y administradores
  */
-
-import { Request, Response } from 'express';
 import { EscalationService } from '../services/escalationService';
+import { getErrorMessage } from '../utils/errorUtils';
 
 const escalationService = EscalationService.getInstance();
 
@@ -16,8 +17,8 @@ export const getConfig = async (req: Request, res: Response): Promise<void> => {
     try {
         const config = escalationService.getConfig();
         res.json({ success: true, data: config });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -25,8 +26,8 @@ export const updateConfig = async (req: Request, res: Response): Promise<void> =
     try {
         const config = escalationService.updateConfig(req.body);
         res.json({ success: true, data: config });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -41,8 +42,8 @@ export const getAdmins = async (req: Request, res: Response): Promise<void> => {
             ? escalationService.getActiveAdmins()
             : escalationService.getAdmins();
         res.json({ success: true, data: admins });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -72,8 +73,8 @@ export const addAdmin = async (req: Request, res: Response): Promise<void> => {
         });
 
         res.json({ success: true, data: admin });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -88,8 +89,8 @@ export const updateAdmin = async (req: Request, res: Response): Promise<void> =>
         }
 
         res.json({ success: true, data: admin });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -104,8 +105,8 @@ export const removeAdmin = async (req: Request, res: Response): Promise<void> =>
         }
 
         res.json({ success: true });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -131,8 +132,8 @@ export const getTickets = async (req: Request, res: Response): Promise<void> => 
         }
 
         res.json({ success: true, data: tickets });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -140,8 +141,8 @@ export const getPendingTickets = async (req: Request, res: Response): Promise<vo
     try {
         const tickets = escalationService.getPendingTickets();
         res.json({ success: true, data: tickets });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -156,8 +157,8 @@ export const getTicket = async (req: Request, res: Response): Promise<void> => {
         }
 
         res.json({ success: true, data: ticket });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -183,8 +184,8 @@ export const createTicket = async (req: Request, res: Response): Promise<void> =
         });
 
         res.json({ success: true, data: ticket });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -206,8 +207,8 @@ export const assignTicket = async (req: Request, res: Response): Promise<void> =
         }
 
         res.json({ success: true, data: ticket });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -229,8 +230,8 @@ export const resolveTicket = async (req: Request, res: Response): Promise<void> 
         }
 
         res.json({ success: true, data: ticket });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -245,8 +246,8 @@ export const closeTicket = async (req: Request, res: Response): Promise<void> =>
         }
 
         res.json({ success: true, data: ticket });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -261,8 +262,8 @@ export const updateTicket = async (req: Request, res: Response): Promise<void> =
         }
 
         res.json({ success: true, data: ticket });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -272,14 +273,14 @@ export const updateTicket = async (req: Request, res: Response): Promise<void> =
 
 export const getStats = async (req: Request, res: Response): Promise<void> => {
     try {
-        console.log('[EscalationController] getStats called');
+        Logger.info('[EscalationController] getStats called');
         const stats = escalationService.getStats();
-        console.log('[EscalationController] getStats success:', stats ? 'ok' : 'null');
+        Logger.info('[EscalationController] getStats success:', stats ? 'ok' : 'null');
         res.json({ success: true, data: stats });
-    } catch (error: any) {
-        console.error('[EscalationController] getStats CRITICAL error:', error);
-        if (error.stack) console.error(error.stack);
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        Logger.error('[EscalationController] getStats CRITICAL error:', error);
+        if (error instanceof Error && error.stack) Logger.error(error.stack);
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -301,7 +302,9 @@ export const handleAdminResponse = async (req: Request, res: Response): Promise<
 
         const result = await escalationService.handleAdminMessage(adminJid, message);
         res.json({ success: true, data: result });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
+
+

@@ -1,0 +1,56 @@
+/* Estilos adicionales para el modal de selección de contactos */
+.contact-selector-modal {
+    position: fixed;
+    inset: 0;
+    background-color: rgba(0, 0, 0, 0.5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 50;
+}
+
+.contact-selector-content {
+    background-color: white;
+    border-radius: 1rem;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    max-width: 48rem;
+    width: 100%;
+    margin: 0 1rem;
+    max-height: 80vh;
+    overflow: hidden;
+}
+
+.contact-item-selected {
+    border-color: rgb(99 102 241) !important;
+    background-color: rgb(238 242 255) !important;
+}
+
+.dark .contact-item-selected {
+    background-color: rgb(30 58 138) !important;
+    border-color: rgb(99 102 241) !important;
+}
+
+/* Animaciones */
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.contact-selector-content {
+    animation: slideUp 0.3s ease-out;
+}
+
+/* Indicadores de tipo */
+.contact-indicator-group {
+    background-color: rgb(34 197 94);
+}
+
+.contact-indicator-individual {
+    background-color: rgb(59 130 246);
+}

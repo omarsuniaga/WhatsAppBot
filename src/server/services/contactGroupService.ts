@@ -1,6 +1,7 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { writeFileSyncAtomic } from '../utils/atomicWrite';
 import { ContactGroup, ContactGroupsData, ContactGroupContact } from '../types';
 
 const DATA_PATH = join(process.cwd(), 'data', 'contact-groups.json');
@@ -58,7 +59,7 @@ class ContactGroupService {
                 mkdirSync(dir, { recursive: true });
             }
             this.data.lastUpdated = new Date().toISOString();
-            writeFileSync(DATA_PATH, JSON.stringify(this.data, null, 2));
+            writeFileSyncAtomic(DATA_PATH, JSON.stringify(this.data, null, 2));
         } catch (error) {
             console.error('Error saving contact groups:', error);
         }

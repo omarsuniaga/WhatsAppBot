@@ -10,25 +10,25 @@ export * from './broadcast';
 // ==========================================
 
 export interface ContactGroupContact {
-    jid: string;
-    name: string;
-    addedAt: string;
+  jid: string;
+  name: string;
+  addedAt: string;
 }
 
 export interface ContactGroup {
-    id: string;
-    name: string;
-    description?: string;
-    color: string;
-    contacts: ContactGroupContact[];
-    createdAt: string;
-    updatedAt: string;
+  id: string;
+  name: string;
+  description?: string;
+  color: string;
+  contacts: ContactGroupContact[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface ContactGroupsData {
-    version: number;
-    lastUpdated: string;
-    groups: ContactGroup[];
+  version: number;
+  lastUpdated: string;
+  groups: ContactGroup[];
 }
 
 // ==========================================
@@ -36,45 +36,45 @@ export interface ContactGroupsData {
 // ==========================================
 
 export interface RateLimitStats {
-    messagesLastMinute: number;
-    messagesLastHour: number;
-    lastMessageTimestamp: number;
-    minuteWindowStart: number;
-    hourWindowStart: number;
+  messagesLastMinute: number;
+  messagesLastHour: number;
+  lastMessageTimestamp: number;
+  minuteWindowStart: number;
+  hourWindowStart: number;
 }
 
 export interface RateLimitBlocks {
-    isBlocked: boolean;
-    blockedUntil: number | null;
-    blockReason: string | null;
-    warningCount: number;
-    lastWarningAt: number | null;
+  isBlocked: boolean;
+  blockedUntil: number | null;
+  blockReason: string | null;
+  warningCount: number;
+  lastWarningAt: number | null;
 }
 
 export interface RateLimitHistoryEntry {
-    timestamp: number;
-    action: string;
-    target: string;
-    success: boolean;
+  timestamp: number;
+  action: string;
+  target: string;
+  success: boolean;
 }
 
 export interface RateLimitData {
-    version: number;
-    stats: RateLimitStats;
-    blocks: RateLimitBlocks;
-    history: RateLimitHistoryEntry[];
+  version: number;
+  stats: RateLimitStats;
+  blocks: RateLimitBlocks;
+  history: RateLimitHistoryEntry[];
 }
 
 export type WarningLevel = 'none' | 'low' | 'medium' | 'high';
 
 export interface RateLimitStatus {
-    canSend: boolean;
-    messagesRemaining: number;
-    resetIn: number;
-    isBlocked: boolean;
-    blockedUntil: number | null;
-    warningLevel: WarningLevel;
-    warningMessage?: string;
+  canSend: boolean;
+  messagesRemaining: number;
+  resetIn: number;
+  isBlocked: boolean;
+  blockedUntil: number | null;
+  warningLevel: WarningLevel;
+  warningMessage?: string;
 }
 
 // ==========================================
@@ -86,34 +86,34 @@ export type QueueMessageType = 'text' | 'media' | 'file' | 'location' | 'contact
 export type TargetType = 'individual' | 'group' | 'broadcast';
 
 export interface QueueMessage {
-    id: string;
-    type: QueueMessageType;
-    target: string;
-    targetType: TargetType;
-    content: Record<string, any>;
-    priority: number;
-    status: QueueMessageStatus;
-    attempts: number;
-    maxAttempts: number;
-    scheduledFor: string;
-    createdAt: string;
-    processedAt: string | null;
-    error: string | null;
+  id: string;
+  type: QueueMessageType;
+  target: string;
+  targetType: TargetType;
+  content: Record<string, any>;
+  priority: number;
+  status: QueueMessageStatus;
+  attempts: number;
+  maxAttempts: number;
+  scheduledFor: string;
+  createdAt: string;
+  processedAt: string | null;
+  error: string | null;
 }
 
 export interface MessageQueueData {
-    version: number;
-    lastProcessed: string;
-    queue: QueueMessage[];
-    processed: QueueMessage[];
+  version: number;
+  lastProcessed: string;
+  queue: QueueMessage[];
+  processed: QueueMessage[];
 }
 
 export interface QueueStatus {
-    pending: number;
-    processing: number;
-    completed: number;
-    failed: number;
-    queue: QueueMessage[];
+  pending: number;
+  processing: number;
+  completed: number;
+  failed: number;
+  queue: QueueMessage[];
 }
 
 // ==========================================
@@ -121,21 +121,21 @@ export interface QueueStatus {
 // ==========================================
 
 export interface GroupParticipant {
-    id: string;
-    admin?: 'admin' | 'superadmin' | null;
+  id: string;
+  admin?: 'admin' | 'superadmin' | null;
 }
 
 export interface WhatsAppGroupMetadata {
-    id: string;
-    subject: string;
-    owner?: string;
-    desc?: string;
-    descId?: string;
-    participants: GroupParticipant[];
-    size?: number;
-    creation?: number;
-    subjectOwner?: string;
-    subjectTime?: number;
+  id: string;
+  subject: string;
+  owner?: string;
+  desc?: string;
+  descId?: string;
+  participants: GroupParticipant[];
+  size?: number;
+  creation?: number;
+  subjectOwner?: string;
+  subjectTime?: number;
 }
 
 export type ParticipantAction = 'add' | 'remove' | 'promote' | 'demote';
@@ -145,16 +145,16 @@ export type ParticipantAction = 'add' | 'remove' | 'promote' | 'demote';
 // ==========================================
 
 export interface ApiResponse<T = any> {
-    success: boolean;
-    data?: T;
-    error?: string;
-    message?: string;
+  success: boolean;
+  data?: T;
+  error?: string;
+  message?: string;
 }
 
 
 export interface BulkSendResult {
-    queued: number;
-    messageIds: string[];
+  queued: number;
+  messageIds: string[];
 }
 
 // ==========================================
@@ -192,6 +192,17 @@ export interface ClassData {
   alumnos: string[];
   grupo: string;
   fechas?: string[];
+  // New fields
+  teacherId?: string;
+  roomId?: string;
+  schedule?: {
+    slots: Array<{
+      day: string;
+      startTime: string;
+      endTime: string;
+    }>;
+  };
+  dias?: string[]; // Legacy
 }
 
 export interface AttendanceData {
@@ -237,6 +248,7 @@ export interface TeacherData {
   whatsappPhone?: string;
   grupo: string;
   pushTokens: { token: string; platform: string }[];
+  uid?: string; // Auth UID
 }
 
 export interface NotificationData {

@@ -4,6 +4,8 @@
 
 import { Request, Response } from 'express';
 import TriggerService, { Trigger } from '../services/triggerService';
+import AutoResponseService from '../services/autoResponseService';
+import { getErrorMessage } from '../utils/errorUtils';
 
 const triggerService = TriggerService.getInstance();
 
@@ -28,10 +30,10 @@ export const getConfig = async (req: Request, res: Response): Promise<void> => {
                 activeTriggersCount: config.triggers.filter(t => t.enabled).length
             }
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -58,10 +60,10 @@ export const toggleListener = async (req: Request, res: Response): Promise<void>
             message: `Listener ${enabled ? 'activado' : 'desactivado'}`,
             listenerEnabled: enabled
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -90,10 +92,10 @@ export const toggleRequireTrigger = async (req: Request, res: Response): Promise
                 : 'Bot responderá a todos los mensajes',
             requireTrigger: require
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -120,10 +122,10 @@ export const updateSettings = async (req: Request, res: Response): Promise<void>
             message: 'Configuración actualizada',
             settings: triggerService.getConfig().settings
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -147,10 +149,10 @@ export const getAllTriggers = async (req: Request, res: Response): Promise<void>
             data: triggers,
             count: triggers.length
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -175,10 +177,10 @@ export const getTrigger = async (req: Request, res: Response): Promise<void> => 
             success: true,
             data: trigger
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -213,10 +215,10 @@ export const createTrigger = async (req: Request, res: Response): Promise<void> 
             message: 'Trigger creado exitosamente',
             data: trigger
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -256,10 +258,10 @@ export const updateTrigger = async (req: Request, res: Response): Promise<void> 
             message: 'Trigger actualizado',
             data: trigger
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -284,10 +286,10 @@ export const deleteTrigger = async (req: Request, res: Response): Promise<void> 
             success: true,
             message: 'Trigger eliminado'
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -313,10 +315,10 @@ export const toggleTrigger = async (req: Request, res: Response): Promise<void> 
             message: `Trigger ${trigger.enabled ? 'activado' : 'desactivado'}`,
             data: trigger
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -335,10 +337,10 @@ export const enableAllTriggers = async (req: Request, res: Response): Promise<vo
             success: true,
             message: 'Todos los triggers han sido activados'
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -353,10 +355,10 @@ export const disableAllTriggers = async (req: Request, res: Response): Promise<v
             success: true,
             message: 'Todos los triggers han sido desactivados'
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -383,10 +385,10 @@ export const importTriggers = async (req: Request, res: Response): Promise<void>
             message: `${count} triggers importados`,
             count
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -402,10 +404,10 @@ export const exportTriggers = async (req: Request, res: Response): Promise<void>
             data: triggers,
             count: triggers.length
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -429,10 +431,10 @@ export const getStats = async (req: Request, res: Response): Promise<void> => {
                 categories
             }
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -447,10 +449,10 @@ export const resetStats = async (req: Request, res: Response): Promise<void> => 
             success: true,
             message: 'Estadísticas reiniciadas'
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -472,19 +474,78 @@ export const testMessage = async (req: Request, res: Response): Promise<void> =>
 
         const result = triggerService.shouldActivateBot(message, 'test-jid');
 
+        // Detailed AI Analysis (Dry Run)
+        const autoResponseService = AutoResponseService.getInstance();
+        const aiAnalysis = await autoResponseService.processMessage(
+            'test-jid',
+            'Usuario de Prueba',
+            message,
+            false
+        );
+
         res.json({
             success: true,
             data: {
                 wouldActivate: result.activate,
                 matchedTriggers: result.triggers,
                 listenerEnabled: triggerService.isListenerEnabled(),
-                requireTrigger: triggerService.isRequireTrigger()
+                requireTrigger: triggerService.isRequireTrigger(),
+                aiAnalysis: {
+                    shouldRespond: aiAnalysis.shouldRespond,
+                    confidence: aiAnalysis.confidence,
+                    escalated: aiAnalysis.escalated,
+                    faqId: aiAnalysis.faqId,
+                    response: aiAnalysis.response
+                }
             }
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
+    }
+};
+
+/**
+ * Stream real-time logs via SSE
+ */
+export const streamLogs = async (req: Request, res: Response): Promise<void> => {
+    try {
+        // SSE headers
+        res.setHeader('Content-Type', 'text/event-stream');
+        res.setHeader('Cache-Control', 'no-cache');
+        res.setHeader('Connection', 'keep-alive');
+
+        // If your express version needs it (common in dev servers):
+        if (typeof (res as any).flushHeaders === 'function') {
+            (res as any).flushHeaders();
+        }
+
+        const logger = (await import('../services/loggerService')).default;
+
+        const onLog = (log: any) => {
+            res.write(`data: ${JSON.stringify(log)}\n\n`);
+        };
+
+        logger.on('log', onLog);
+
+        // Send initial connection message
+        res.write(`data: ${JSON.stringify({ level: 'INFO', message: 'Conectado al monitor de logs en tiempo real', timestamp: new Date().toISOString() })}\n\n`);
+
+        // Handle client disconnect
+        req.on('close', () => {
+            logger.off('log', onLog);
+        });
+    } catch (error: unknown) {
+        console.error('[TriggerController] Error in streamLogs:', error);
+        if (!res.headersSent) {
+            res.status(500).json({
+                success: false,
+                error: getErrorMessage(error)
+            });
+        } else {
+            res.end();
+        }
     }
 };

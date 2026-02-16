@@ -6,6 +6,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { writeFileSyncAtomic } from '../utils/atomicWrite';
+import { getErrorMessage } from '../utils/errorUtils';
 import type {
     BroadcastCampaign,
     ContactList,
@@ -54,7 +56,9 @@ export class BroadcastService {
 
     private constructor() {
         this.dataPath = path.join(process.cwd(), 'data', 'broadcast.json');
+        console.log(`[BroadcastService] Initializing with data path: ${this.dataPath}`);
         this.data = this.loadData();
+        this.cleanupStuckCampaigns();
     }
 
     public static getInstance(): BroadcastService {
@@ -98,9 +102,28 @@ export class BroadcastService {
     private saveData(): void {
         try {
             this.data.lastUpdated = new Date().toISOString();
-            fs.writeFileSync(this.dataPath, JSON.stringify(this.data, null, 2));
+            writeFileSyncAtomic(this.dataPath, JSON.stringify(this.data, null, 2));
         } catch (error) {
             console.error('Error saving broadcast data:', error);
+        }
+    }
+
+    /**
+     * Resets any 'running' campaigns to 'paused' on startup.
+     * This ensures the database state matches the in-memory reality (nothing is running yet).
+     */
+    private cleanupStuckCampaigns(): void {
+        let changed = false;
+        for (const campaign of this.data.campaigns) {
+            if (campaign.status === 'running') {
+                campaign.status = 'paused';
+                campaign.pausedAt = new Date();
+                changed = true;
+                console.log(`[BroadcastService] Cleaned up stuck campaign: ${campaign.name} (${campaign.id})`);
+            }
+        }
+        if (changed) {
+            this.saveData();
         }
     }
 
@@ -112,8 +135,33 @@ export class BroadcastService {
         return { ...this.data.config };
     }
 
-    public updateConfig(config: Partial<BroadcastConfig>): BroadcastConfig {
-        this.data.config = { ...this.data.config, ...config };
+    public updateConfig(config: Partial<BroadcastConfig> & Record<string, any>): BroadcastConfig {
+        const normalizedConfig: Partial<BroadcastConfig> = { ...config };
+
+        // Legacy/frontend compatibility mapping
+        if (typeof config.messageDelay === 'number') {
+            normalizedConfig.defaultDelay = config.messageDelay;
+        }
+        if (typeof config.randomizeDelay === 'boolean') {
+            normalizedConfig.defaultRandomizeDelay = config.randomizeDelay;
+        }
+        if (typeof config.startHour === 'string' || typeof config.endHour === 'string') {
+            normalizedConfig.allowedHours = {
+                ...this.data.config.allowedHours,
+                ...(normalizedConfig.allowedHours || {}),
+                ...(typeof config.startHour === 'string' ? { start: config.startHour } : {}),
+                ...(typeof config.endHour === 'string' ? { end: config.endHour } : {})
+            };
+        }
+
+        this.data.config = {
+            ...this.data.config,
+            ...normalizedConfig,
+            allowedHours: {
+                ...this.data.config.allowedHours,
+                ...(normalizedConfig.allowedHours || {})
+            }
+        };
         this.saveData();
         return this.data.config;
     }
@@ -333,8 +381,14 @@ export class BroadcastService {
     }
 
     private extractVariables(content: string): string[] {
-        const matches = content.match(/\{(\w+)\}/g) || [];
-        return [...new Set(matches.map(m => m.slice(1, -1)))];
+        // Match both {{var}} and {var} formats
+        const doubleMatches = content.match(/\{\{(\w+)\}\}/g) || [];
+        const singleMatches = content.match(/\{(\w+)\}/g) || [];
+        const allNames = [
+            ...doubleMatches.map(m => m.slice(2, -2)),
+            ...singleMatches.map(m => m.slice(1, -1)),
+        ];
+        return [...new Set(allNames)];
     }
 
     // ==========================================
@@ -412,13 +466,24 @@ export class BroadcastService {
         const index = this.data.campaigns.findIndex(c => c.id === id);
         if (index === -1) return null;
 
-        // Don't allow updating running campaigns
-        if (this.data.campaigns[index].status === 'running') {
-            return null;
+        const campaign = this.data.campaigns[index];
+
+        // If campaign is running, only allow progress updates (sent, failed, status, etc.)
+        // Block structural changes (message, targetLists, etc.) while running
+        if (campaign.status === 'running') {
+            const allowedRunningFields = new Set([
+                'sent', 'failed', 'delivered', 'read', 'replied',
+                'failedContacts', 'status', 'completedAt', 'pausedAt'
+            ]);
+            const updateKeys = Object.keys(updates);
+            const hasDisallowedFields = updateKeys.some(k => !allowedRunningFields.has(k));
+            if (hasDisallowedFields) {
+                return null;
+            }
         }
 
         this.data.campaigns[index] = {
-            ...this.data.campaigns[index],
+            ...campaign,
             ...updates,
             updatedAt: new Date()
         };
@@ -485,7 +550,7 @@ export class BroadcastService {
             return { success: false, error: 'Campaign not found' };
         }
 
-        if (campaign.status === 'running') {
+        if (campaign.status === 'running' && this.runningCampaigns.has(id)) {
             return { success: false, error: 'Campaign is already running' };
         }
 
@@ -494,8 +559,14 @@ export class BroadcastService {
         }
 
         // Check allowed hours
-        if (this.data.config.allowedHours.enabled && !this.isWithinAllowedHours()) {
-            return { success: false, error: 'Outside allowed sending hours' };
+        if (this.data.config.allowedHours.enabled) {
+            const allowedWindow = this.getAllowedHoursWindowInfo();
+            if (!allowedWindow.allowed) {
+                return {
+                    success: false,
+                    error: `Outside allowed sending hours (${allowedWindow.reason})`
+                };
+            }
         }
 
         // Update campaign status
@@ -533,13 +604,30 @@ export class BroadcastService {
             campaign.excludeContacts
         );
 
-        console.log(`📢 Starting campaign "${campaign.name}" with ${recipients.length} recipients`);
+        // Build set of already-processed JIDs (sent + failed) to skip on resume.
+        // This is JID-based (not index-based), so it's safe even if contact
+        // lists changed between pause and resume.
+        const processedJids = new Set<string>();
+        if (campaign.failedContacts) {
+            for (const fc of campaign.failedContacts) {
+                processedJids.add(fc.jid);
+            }
+        }
+        // We can't know exactly which JIDs succeeded unless we track them,
+        // but we know (sent + failed) = total processed. Mark the first N
+        // recipients as "already sent" only if the list hasn't changed.
+        // For safety, we skip recipients that appear in failedContacts and
+        // count remaining sent from the counter.
+        let alreadySentCount = campaign.sent; // Successful sends to skip
+
+        console.log(`📢 Starting campaign "${campaign.name}" with ${recipients.length} recipients (resuming: ${campaign.sent} sent, ${campaign.failed} failed)`);
 
         let sent = campaign.sent;
         let failed = campaign.failed;
         const failedContacts: FailedContact[] = [...campaign.failedContacts];
+        let processed = 0;
 
-        for (let i = sent; i < recipients.length; i++) {
+        for (let i = 0; i < recipients.length; i++) {
             const runningState = this.runningCampaigns.get(campaignId);
             if (!runningState || runningState.abort) {
                 console.log(`Campaign ${campaignId} aborted`);
@@ -547,6 +635,17 @@ export class BroadcastService {
             }
 
             const recipient = recipients[i];
+
+            // Skip already-failed JIDs
+            if (processedJids.has(recipient.jid)) {
+                continue;
+            }
+
+            // Skip already-sent (count-based, but only for the first N)
+            if (alreadySentCount > 0) {
+                alreadySentCount--;
+                continue;
+            }
 
             try {
                 // Personalize message
@@ -573,23 +672,28 @@ export class BroadcastService {
                         retryCount: 0
                     });
                 }
-            } catch (error: any) {
+            } catch (error: unknown) {
                 failed++;
                 failedContacts.push({
                     jid: recipient.jid,
-                    reason: error.message || 'Unknown error',
+                    reason: getErrorMessage(error) || 'Unknown error',
                     failedAt: new Date(),
                     retryCount: 0
                 });
             }
 
+            processed++;
+
             // Update progress
-            const progress = Math.round(((i + 1) / recipients.length) * 100);
+            const totalToProcess = recipients.length - processedJids.size;
+            const progress = totalToProcess > 0
+                ? Math.round(((campaign.sent + campaign.failed + processed) / recipients.length) * 100)
+                : 100;
             if (runningState) {
                 runningState.progress = {
                     campaignId,
                     status: 'running',
-                    progress,
+                    progress: Math.min(progress, 100),
                     sent,
                     total: recipients.length,
                     currentContact: recipient.name,
@@ -601,7 +705,7 @@ export class BroadcastService {
             }
 
             // Update campaign in database periodically
-            if (i % 10 === 0 || i === recipients.length - 1) {
+            if (processed % 10 === 0 || i === recipients.length - 1) {
                 this.updateCampaign(campaignId, {
                     sent,
                     failed,
@@ -636,6 +740,15 @@ export class BroadcastService {
             this.updateCampaign(id, { status: 'paused', pausedAt: new Date() });
             return true;
         }
+
+        // If not in runningCampaigns but status is 'running' in DB,
+        // it's a stuck campaign. Allow pausing it (resets state).
+        const campaign = this.getCampaign(id);
+        if (campaign && campaign.status === 'running') {
+            this.updateCampaign(id, { status: 'paused', pausedAt: new Date() });
+            return true;
+        }
+
         return false;
     }
 
@@ -645,16 +758,25 @@ export class BroadcastService {
     }
 
     private personalizeMessage(message: string, contact: ContactListItem): string {
-        let personalized = message
-            .replace(/\{nombre\}/gi, contact.name || contact.phone)
-            .replace(/\{telefono\}/gi, contact.phone)
-            .replace(/\{fecha\}/gi, new Date().toLocaleDateString('es-ES'));
+        const replacements: Record<string, string> = {
+            nombre: contact.name || contact.phone,
+            telefono: contact.phone,
+            fecha: new Date().toLocaleDateString('es-ES'),
+        };
 
-        // Replace custom fields
+        // Merge custom fields
         if (contact.customFields) {
             for (const [key, value] of Object.entries(contact.customFields)) {
-                personalized = personalized.replace(new RegExp(`\\{${key}\\}`, 'gi'), value);
+                replacements[key] = value;
             }
+        }
+
+        // Replace both {{var}} (double braces) and {var} (single braces) formats
+        let personalized = message;
+        for (const [key, value] of Object.entries(replacements)) {
+            // Double braces first (more specific), then single braces
+            personalized = personalized.replace(new RegExp(`\\{\\{${key}\\}\\}`, 'gi'), value);
+            personalized = personalized.replace(new RegExp(`\\{${key}\\}`, 'gi'), value);
         }
 
         return personalized;
@@ -673,19 +795,26 @@ export class BroadcastService {
         return Math.round((remaining * delayMs) / 1000);
     }
 
-    private isWithinAllowedHours(): boolean {
+    private getAllowedHoursWindowInfo(): { allowed: boolean; reason: string } {
         const config = this.data.config.allowedHours;
-        if (!config.enabled) return true;
-
-        const now = new Date();
-        const day = now.getDay();
-
-        // Check weekends
-        if (!config.allowWeekends && (day === 0 || day === 6)) {
-            return false;
+        if (!config.enabled) {
+            return { allowed: true, reason: 'Allowed hours disabled' };
         }
 
-        // Check time
+        const now = new Date();
+        const dayStr = now.toLocaleDateString('en-US', {
+            weekday: 'short',
+            timeZone: config.timezone
+        });
+        const isWeekend = dayStr === 'Sun' || dayStr === 'Sat';
+
+        if (!config.allowWeekends && isWeekend) {
+            return {
+                allowed: false,
+                reason: `weekend blocked (timezone=${config.timezone}, day=${dayStr}, weekendsAllowed=${config.allowWeekends})`
+            };
+        }
+
         const currentTime = now.toLocaleTimeString('en-US', {
             hour12: false,
             hour: '2-digit',
@@ -693,7 +822,32 @@ export class BroadcastService {
             timeZone: config.timezone
         });
 
-        return currentTime >= config.start && currentTime <= config.end;
+        const startMinutes = this.timeToMinutes(config.start);
+        const endMinutes = this.timeToMinutes(config.end);
+        const currentMinutes = this.timeToMinutes(currentTime);
+
+        // Supports windows that cross midnight, e.g. 22:00 -> 06:00
+        const inRange = startMinutes <= endMinutes
+            ? currentMinutes >= startMinutes && currentMinutes <= endMinutes
+            : currentMinutes >= startMinutes || currentMinutes <= endMinutes;
+
+        if (!inRange) {
+            return {
+                allowed: false,
+                reason: `timezone=${config.timezone}, now=${currentTime}, allowed=${config.start}-${config.end}`
+            };
+        }
+
+        return { allowed: true, reason: 'Within allowed window' };
+    }
+
+    private timeToMinutes(value: string): number {
+        const match = /^(\d{1,2}):(\d{2})/.exec(value);
+        if (!match) return 0;
+
+        const hours = Number(match[1]);
+        const minutes = Number(match[2]);
+        return (hours * 60) + minutes;
     }
 
     // ==========================================
@@ -742,13 +896,13 @@ export class BroadcastService {
     // ==========================================
 
     public getStats(): CampaignStats {
-        const campaigns = this.data.campaigns;
+        const campaigns = this.data?.campaigns || [];
         const completed = campaigns.filter(c => c.status === 'completed');
 
-        const totalSent = campaigns.reduce((sum, c) => sum + c.sent, 0);
-        const totalDelivered = campaigns.reduce((sum, c) => sum + c.delivered, 0);
-        const totalRead = campaigns.reduce((sum, c) => sum + c.read, 0);
-        const totalReplied = campaigns.reduce((sum, c) => sum + c.replied, 0);
+        const totalSent = campaigns.reduce((sum, c) => sum + (c.sent || 0), 0);
+        const totalDelivered = campaigns.reduce((sum, c) => sum + (c.delivered || 0), 0);
+        const totalRead = campaigns.reduce((sum, c) => sum + (c.read || 0), 0);
+        const totalReplied = campaigns.reduce((sum, c) => sum + (c.replied || 0), 0);
 
         return {
             totalCampaigns: campaigns.length,

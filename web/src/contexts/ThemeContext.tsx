@@ -1,11 +1,9 @@
 /**
  * ThemeContext - Dark/Light mode state management
- * Persists theme preference in localStorage AND Firebase for cross-device sync
+ * Persists theme preference in localStorage
  */
 
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import { userConfigService } from '../services/firestore/userConfigService';
-import { useAuth } from './AuthContext';
 
 type Theme = 'light' | 'dark';
 
@@ -20,9 +18,8 @@ const ThemeContext = createContext<ThemeContextType | undefined>(undefined);
 const THEME_KEY = 'app-theme';
 
 export const ThemeProvider = ({ children }: { children: ReactNode }) => {
-    const { currentUser } = useAuth();
     const [theme, setThemeState] = useState<Theme>(() => {
-        // Check localStorage first for instant load
+        // Check localStorage first
         const saved = localStorage.getItem(THEME_KEY) as Theme | null;
         if (saved === 'dark' || saved === 'light') {
             return saved;
@@ -34,57 +31,16 @@ export const ThemeProvider = ({ children }: { children: ReactNode }) => {
         return 'light';
     });
 
-    const [firebaseSynced, setFirebaseSynced] = useState(false);
-
-    // Load from Firebase when user is authenticated
     useEffect(() => {
-        if (!currentUser) return;
-
-        const loadFromFirebase = async () => {
-            try {
-                const userConfig = await userConfigService.getUserConfig(currentUser.uid);
-
-                if (userConfig?.theme) {
-                    // Firebase has a preference, use it
-                    setThemeState(userConfig.theme);
-                    localStorage.setItem(THEME_KEY, userConfig.theme);
-                    console.log('✅ Theme loaded from Firebase:', userConfig.theme);
-                } else {
-                    // No Firebase config yet, sync current localStorage to Firebase
-                    await userConfigService.syncFromLocalStorage(currentUser.uid);
-                }
-
-                setFirebaseSynced(true);
-            } catch (error) {
-                console.error('Error loading theme from Firebase:', error);
-                // Continue with localStorage value
-                setFirebaseSynced(true);
-            }
-        };
-
-        loadFromFirebase();
-    }, [currentUser]);
-
-    // Apply theme to document and sync to storage
-    useEffect(() => {
+        // Update document class and localStorage when theme changes
         const root = document.documentElement;
         if (theme === 'dark') {
             root.classList.add('dark');
         } else {
             root.classList.remove('dark');
         }
-
-        // Save to localStorage immediately
         localStorage.setItem(THEME_KEY, theme);
-
-        // Save to Firebase if user is authenticated and initial sync is done
-        if (currentUser && firebaseSynced) {
-            userConfigService.updateTheme(currentUser.uid, theme).catch(error => {
-                console.error('Error saving theme to Firebase:', error);
-                // Continue anyway - localStorage is the fallback
-            });
-        }
-    }, [theme, currentUser, firebaseSynced]);
+    }, [theme]);
 
     const toggleTheme = () => {
         setThemeState(prev => prev === 'light' ? 'dark' : 'light');

@@ -40,48 +40,48 @@ export interface Clase extends FirestoreDocument {
     description?: string;
     instrument?: string;        // Legacy: single instrument (deprecated, use instruments)
     instruments?: string[];     // NEW: support multiple instruments for combined classes
-    
+
     // Basic info (legacy)
     nombre?: string;
     instrumento?: string;
     descripcion?: string;
-    
+
     // Status
     status?: 'active' | 'inactive' | 'archived';
     activo?: boolean; // legacy
-    
-    // Primary Teacher (new)
-    teacherId?: string;
-    
+
+    // Teacher Assignment (supports single or multiple teachers)
+    teacherId?: string | string[];  // UID(s) from MAESTROS collection
+
     // Primary Teacher (legacy)
     profesor_id?: string;
     profesor_nombre?: string;
     profesor_ids?: string[];
     profesor_nombres?: string[];
-    
+
     // Collaboration - shared with other teachers
     sharedWith?: string[];
     permissions?: Record<string, string[]>;
-    
+
     // Students (new)
     studentIds?: string[];
-    
+
     // Students (legacy)
     alumno_ids?: string[];
     alumnos?: string[];
-    
+
     // Room (new)
     roomId?: string;
-    
+
     // Room (legacy)
     salon_id?: string;
     salon_nombre?: string;
-    
+
     // Schedule (new format)
     schedule?: {
         slots: ScheduleSlot[];
     };
-    
+
     // Schedule (legacy format)
     horarios?: Array<{
         dia: number;
@@ -92,14 +92,92 @@ export interface Clase extends FirestoreDocument {
     dias?: string[];
     hora_inicio?: string;
     hora_fin?: string;
-    
+
     // Audit trail
     changeHistory?: ChangeHistoryEntry[];
-    
+
     // Metadata
     createdAt?: string;
     updatedAt?: string;
 }
+
+/**
+ * Helper Functions for Multi-Teacher Support
+ */
+
+/**
+ * Get all teacher UIDs from a class (handles both string and array)
+ * Also checks legacy fields for backward compatibility
+ */
+export const getTeacherIds = (clase: Partial<Clase>): string[] => {
+    if (!clase.teacherId) {
+        // Fallback to legacy fields
+        if (clase.profesor_ids && clase.profesor_ids.length > 0) {
+            return clase.profesor_ids;
+        }
+        if (clase.profesor_id) {
+            return [clase.profesor_id];
+        }
+        // Check sharedWith for legacy collaboration
+        if (clase.sharedWith && clase.sharedWith.length > 0) {
+            return clase.sharedWith;
+        }
+        return [];
+    }
+
+    return Array.isArray(clase.teacherId) ? clase.teacherId : [clase.teacherId];
+};
+
+/**
+ * Check if a teacher is assigned to a class
+ */
+export const isTeacherAssigned = (clase: Partial<Clase>, teacherUid: string): boolean => {
+    const teacherIds = getTeacherIds(clase);
+    return teacherIds.includes(teacherUid);
+};
+
+/**
+ * Add a teacher to a class
+ * Returns the updated teacherId value (string if single, array if multiple)
+ */
+export const addTeacherToClass = (clase: Partial<Clase>, teacherUid: string): string | string[] => {
+    const current = getTeacherIds(clase);
+
+    if (current.includes(teacherUid)) {
+        // Already assigned, return current value
+        return clase.teacherId || (current.length === 1 ? current[0] : current);
+    }
+
+    const updated = [...current, teacherUid];
+    return updated.length === 1 ? updated[0] : updated;
+};
+
+/**
+ * Remove a teacher from a class
+ * Returns the updated teacherId value (string if single, array if multiple, undefined if none)
+ */
+export const removeTeacherFromClass = (clase: Partial<Clase>, teacherUid: string): string | string[] | undefined => {
+    const current = getTeacherIds(clase);
+    const updated = current.filter(id => id !== teacherUid);
+
+    if (updated.length === 0) return undefined;
+    return updated.length === 1 ? updated[0] : updated;
+};
+
+/**
+ * Get the primary teacher UID (first in the list)
+ */
+export const getPrimaryTeacherId = (clase: Partial<Clase>): string | undefined => {
+    const teacherIds = getTeacherIds(clase);
+    return teacherIds.length > 0 ? teacherIds[0] : undefined;
+};
+
+/**
+ * Check if a class has multiple teachers
+ */
+export const hasMultipleTeachers = (clase: Partial<Clase>): boolean => {
+    return getTeacherIds(clase).length > 1;
+};
 
 // Helper to check if two time slots overlap
 const timeToMinutes = (time: string): number => {
@@ -109,12 +187,12 @@ const timeToMinutes = (time: string): number => {
 
 const slotsOverlap = (slot1: ScheduleSlot, slot2: ScheduleSlot): boolean => {
     if (slot1.day !== slot2.day) return false;
-    
+
     const start1 = timeToMinutes(slot1.startTime);
     const end1 = timeToMinutes(slot1.endTime);
     const start2 = timeToMinutes(slot2.startTime);
     const end2 = timeToMinutes(slot2.endTime);
-    
+
     return start1 < end2 && start2 < end1;
 };
 
@@ -125,21 +203,18 @@ class ClasesServiceClass extends FirestoreService<Clase> {
 
     async getAllClases(activeOnly: boolean = false): Promise<Clase[]> {
         const constraints: QueryConstraint[] = [];
-        
+
         if (activeOnly) {
             constraints.push(where('status', '==', 'active'));
         }
-        
+
         return super.getAll(constraints);
     }
 
     async getByTeacher(teacherId: string): Promise<Clase[]> {
-        // Get classes where teacher is primary OR shared with
+        // Get classes where teacher is assigned (primary or co-teacher)
         const allClasses = await this.getAllClases();
-        return allClasses.filter(c => 
-            c.teacherId === teacherId || 
-            c.sharedWith?.includes(teacherId)
-        );
+        return allClasses.filter(c => isTeacherAssigned(c, teacherId));
     }
 
     async getByRoom(roomId: string): Promise<Clase[]> {
@@ -165,7 +240,7 @@ class ClasesServiceClass extends FirestoreService<Clase> {
     ): Promise<ConflictResult[]> {
         const conflicts: ConflictResult[] = [];
         const allClasses = await this.getAllClases(true);
-        
+
         if (!newClass.schedule?.slots || newClass.schedule.slots.length === 0) {
             return conflicts;
         }
@@ -261,8 +336,8 @@ class ClasesServiceClass extends FirestoreService<Clase> {
      * Update class with automatic change history and validation
      */
     async updateWithHistory(
-        id: string, 
-        updates: Partial<Clase>, 
+        id: string,
+        updates: Partial<Clase>,
         changeDescription: string,
         userId?: string
     ): Promise<void> {
@@ -298,23 +373,23 @@ class ClasesServiceClass extends FirestoreService<Clase> {
     async getWeeklySchedule(): Promise<Record<string, Clase[]>> {
         const days = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
         const schedule: Record<string, Clase[]> = {};
-        
+
         const allClasses = await this.getActiveClasses();
-        
+
         days.forEach(day => {
             schedule[day] = allClasses.filter(clase => {
                 const slots = clase.schedule?.slots || [];
                 return slots.some(slot => slot.day === day);
             }).sort((a, b) => {
                 // Sort by earliest start time
-                const aSlots =a.schedule?.slots?.filter(s => s.day === day) || [];
+                const aSlots = a.schedule?.slots?.filter(s => s.day === day) || [];
                 const bSlots = b.schedule?.slots?.filter(s => s.day === day) || [];
                 const aStart = aSlots[0]?.startTime || '00:00';
                 const bStart = bSlots[0]?.startTime || '00:00';
                 return aStart.localeCompare(bStart);
             });
         });
-        
+
         return schedule;
     }
 
@@ -324,7 +399,7 @@ class ClasesServiceClass extends FirestoreService<Clase> {
      */
     async assignTeacherToClasses(classIds: string[], teacherId: string, teacherName: string): Promise<void> {
         try {
-            const promises = classIds.map(id => 
+            const promises = classIds.map(id =>
                 this.update(id, {
                     teacherId: teacherId,
                     profesor_id: teacherId, // Legacy sync
@@ -348,16 +423,16 @@ class ClasesServiceClass extends FirestoreService<Clase> {
      */
     async getClassesByDay(dayName: string): Promise<Clase[]> {
         const allClasses = await this.getActiveClasses();
-        
+
         return allClasses.filter(clase => {
             // Check modern schedule
             if (clase.schedule?.slots?.some(s => s.day === dayName)) {
                 return true;
             }
-            
+
             // Check legacy 'dia' string
             if (clase.dia === dayName) return true;
-            
+
             // Check legacy 'dias' array
             if (clase.dias?.includes(dayName)) return true;
 

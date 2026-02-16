@@ -12,6 +12,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { writeFileSyncAtomic } from '../utils/atomicWrite';
 
 interface ChatReadState {
     jid: string;
@@ -88,7 +89,7 @@ class ReadStateService {
                 states: Object.fromEntries(this.states)
             };
             
-            fs.writeFileSync(this.dataFile, JSON.stringify(store, null, 2));
+            writeFileSyncAtomic(this.dataFile, JSON.stringify(store, null, 2));
         } catch (error) {
             console.error('[ReadStateService] Error saving read states:', error);
         }

@@ -17,10 +17,10 @@
       "end": "20:00",
       "allowWeekends": false
     },
-    "messageDelay": 2000,
+    "messageDelay": 3000,
     "randomizeDelay": true,
     "startHour": "08:00",
-    "endHour": "19:00"
+    "endHour": "20:00"
   },
   "campaigns": [
     {
@@ -32,7 +32,7 @@
       ],
       "targetContacts": [],
       "excludeContacts": [],
-      "status": "running",
+      "status": "paused",
       "totalRecipients": 1,
       "sent": 0,
       "delivered": 0,
@@ -50,7 +50,35 @@
       "createdBy": "admin",
       "createdAt": "2026-01-26T22:33:16.391Z",
       "updatedAt": "2026-01-26T22:33:22.674Z",
-      "startedAt": "2026-01-26T22:33:22.674Z"
+      "startedAt": "2026-01-26T22:33:22.674Z",
+      "pausedAt": "2026-02-12T23:45:41.711Z"
+    },
+    {
+      "id": "7d8b4c0b-c7e2-475c-a0b3-55baf5a2ecbf",
+      "name": "Recordatorio Diario - 10/2/2026",
+      "description": "Generado automáticamente por IA. Pendiente de aprobación.",
+      "message": "RECORDATORIO GENERAL - Martes 10 de febrero\nNo hay información disponible sobre las clases de hoy. Por favor, comuníquese con la administración para obtener más detalles.\n¡Esperamos que tengas un día lleno de melodías y armonías! 🎻🎺🎶",
+      "targetLists": [],
+      "targetContacts": [],
+      "excludeContacts": [],
+      "status": "draft",
+      "totalRecipients": 0,
+      "sent": 0,
+      "delivered": 0,
+      "read": 0,
+      "replied": 0,
+      "failed": 0,
+      "failedContacts": [],
+      "delayBetweenMessages": 3000,
+      "randomizeDelay": true,
+      "minDelay": 2000,
+      "maxDelay": 5000,
+      "personalizeMessage": false,
+      "trackDelivery": true,
+      "trackRead": true,
+      "createdBy": "admin",
+      "createdAt": "2026-02-10T16:01:02.213Z",
+      "updatedAt": "2026-02-10T16:01:02.213Z"
     }
   ],
   "contactLists": [
@@ -74,5 +102,5 @@
     }
   ],
   "templates": [],
-  "lastUpdated": "2026-01-26T22:33:22.674Z"
+  "lastUpdated": "2026-02-14T01:42:53.303Z"
 }

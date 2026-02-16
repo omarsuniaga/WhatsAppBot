@@ -1,64 +1,77 @@
-# =============================================================================
-# WhatsApp Bot Platform - Multi-Stage Dockerfile
-# =============================================================================
-# Imagen unificada: Express sirve backend + frontend estático
+# ============================================
+# WhatsApp Bot Platform — Production Dockerfile
+# Hardened: non-root, pinned versions, multi-stage
+# ============================================
 
-# -----------------------------------------------------------------------------
-# Stage 1: Builder - Compilar TypeScript y construir frontend
-# -----------------------------------------------------------------------------
-FROM node:18-alpine AS builder
+# ---- Stage 1: Build Frontend ----
+FROM node:22.14-alpine3.21 AS frontend-builder
 
-RUN apk add --no-cache python3 make g++
+WORKDIR /build/web
 
-WORKDIR /app
+COPY web/package.json web/package-lock.json* ./
+RUN npm ci --ignore-scripts
 
-# Copiar package files para cache de dependencias
-COPY package*.json ./
-COPY web/package*.json ./web/
-
-# Instalar todas las dependencias (incluyendo devDependencies para build)
-RUN npm ci --silent && cd web && npm ci --silent
-
-# Copiar código fuente
-COPY tsconfig.json ./
-COPY src/ ./src/
-COPY backend/src/ ./backend/src/
-COPY web/ ./web/
-
-# Compilar backend (TypeScript → lib/)
+COPY web/ ./
 RUN npm run build
 
-# Compilar frontend (React → web/dist/)
-RUN cd web && npm run build
+# ---- Stage 2: Build Backend ----
+FROM node:22.14-alpine3.21 AS backend-builder
 
-# -----------------------------------------------------------------------------
-# Stage 2: Production - Imagen de runtime
-# -----------------------------------------------------------------------------
-FROM node:18-alpine
+WORKDIR /build
 
-RUN apk add --no-cache ffmpeg tini curl && rm -rf /var/cache/apk/*
+COPY package.json package-lock.json* ./
+RUN npm ci
+
+COPY src/ ./src/
+COPY backend/ ./backend/
+COPY tsconfig.json ./
+
+RUN npm run build
+
+# ---- Stage 3: Production Image ----
+FROM node:22.14-alpine3.21 AS production
+
+# Install only runtime system deps, then clean apk cache
+RUN apk add --no-cache ffmpeg wget \
+    && rm -rf /var/cache/apk/*
 
 WORKDIR /app
 
-# Instalar solo dependencias de producción
-COPY package*.json ./
-RUN npm ci --omit=dev --silent && npm cache clean --force
+# Create non-root user BEFORE copying files
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
 
-# Copiar artefactos compilados del builder
-COPY --from=builder /app/lib ./lib
-COPY --from=builder /app/web/dist ./web/dist
+# Install production deps only (as root, before switching user)
+COPY package.json package-lock.json* ./
+RUN npm ci --omit=dev --ignore-scripts \
+    && npm cache clean --force \
+    && rm -rf /tmp/* /root/.npm
 
-# Crear directorios para volúmenes
-RUN mkdir -p ./web-bot_sessions ./data ./backend/data
+# Copy compiled backend
+COPY --from=backend-builder --chown=appuser:appgroup /build/lib ./lib
 
+# Copy built frontend
+COPY --from=frontend-builder --chown=appuser:appgroup /build/web/dist ./web/dist
+
+# Copy default data files (will be overridden by volume in production)
+COPY --chown=appuser:appgroup data/ ./data/
+
+# Create writable directories for runtime (owned by appuser)
+RUN mkdir -p /app/auth_info /app/logs \
+    && chown -R appuser:appgroup /app/auth_info /app/logs /app/data
+
+# Environment defaults (secrets come from .env / docker-compose, NEVER baked in)
 ENV NODE_ENV=production
 ENV PORT=3001
 
+# Do NOT expose — reverse proxy handles public access
+# EXPOSE is documentation only; actual port mapping is in docker-compose
 EXPOSE 3001
 
-HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
-    CMD curl -f http://localhost:3001/health || exit 1
+# Health check (wget is lighter than curl on alpine)
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s --retries=3 \
+    CMD wget -qO- http://localhost:3001/health || exit 1
 
-ENTRYPOINT ["/sbin/tini", "--"]
+# Drop to non-root user
+USER appuser
 
 CMD ["node", "lib/server/index.js"]

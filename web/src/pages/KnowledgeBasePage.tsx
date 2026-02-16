@@ -7,6 +7,8 @@ import {
     BookOpen, Search, Plus, Edit2, Trash2, Upload, Download,
     ChevronDown, ChevronRight, Save, FileText, RefreshCw
 } from 'lucide-react';
+import { InfoButton } from '../components/common/InfoButton';
+import { usePageInfo } from '../hooks/useViewInfo';
 
 interface FAQ {
     id: string;
@@ -29,6 +31,7 @@ type TabType = 'faqs' | 'import-export' | 'search';
 
 export const KnowledgeBasePage = () => {
     const [activeTab, setActiveTab] = useState<TabType>('faqs');
+    const pageInfo = usePageInfo('knowledgeBase');
     const [faqs, setFaqs] = useState<FAQ[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
@@ -252,6 +255,13 @@ export const KnowledgeBasePage = () => {
                             <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">Base de Conocimientos</h1>
                             <p className="text-sm text-gray-500 dark:text-gray-400">Gestiona FAQs y respuestas automáticas</p>
                         </div>
+                        {pageInfo.hasInfo && (
+                            <InfoButton
+                                title={pageInfo.title}
+                                description={pageInfo.description}
+                                tips={pageInfo.tips}
+                            />
+                        )}
                     </div>
                     <button
                         onClick={() => { setIsCreating(true); setEditingFaq(null); setActiveTab('faqs'); }}

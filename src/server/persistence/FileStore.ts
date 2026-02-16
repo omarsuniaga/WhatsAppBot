@@ -15,6 +15,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { promisify } from 'util';
+import { getErrorMessage } from '../utils/errorUtils';
 
 const writeFile = promisify(fs.writeFile);
 const readFile = promisify(fs.readFile);
@@ -92,8 +93,8 @@ export class FileStore<T> {
             this.cacheValid = true;
             
             return parsed;
-        } catch (error: any) {
-            if (error.code === 'ENOENT') {
+        } catch (error: unknown) {
+            if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
                 // File doesn't exist, return default
                 return this.defaultValue;
             }
@@ -185,8 +186,8 @@ export class FileStore<T> {
             this.cache = null;
             this.cacheValid = false;
             return true;
-        } catch (error: any) {
-            if (error.code === 'ENOENT') {
+        } catch (error: unknown) {
+            if (error instanceof Error && (error as NodeJS.ErrnoException).code === 'ENOENT') {
                 return false;
             }
             throw error;

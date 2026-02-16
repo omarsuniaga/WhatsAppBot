@@ -18,6 +18,24 @@ export interface Message {
     senderJid?: string;
     senderName?: string;
     senderProfilePic?: string;
+    // Enhanced media information from history
+    mediaUrl?: string;
+    fileName?: string;
+    fileSize?: number;
+    duration?: number;
+    location?: {
+        lat: number;
+        lng: number;
+        name?: string;
+    };
+    contactInfo?: {
+        name: string;
+        vcard: string;
+    };
+    participant?: string; // Group participant JID
+    // Metadata flags
+    isMedia?: boolean;
+    hasCaption?: boolean;
 }
 
 export interface Chat {

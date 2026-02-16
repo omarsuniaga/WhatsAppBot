@@ -1,9 +1,17 @@
 {
   "version": 1,
   "enabled": true,
-  "geminiApiKey": "AIzaSyDHVpCzsXxxlmB-s7ILDy8AyeWd0Si2UX0",
+  "geminiApiKey": null,
+  "aiConfig": {
+    "preferredProvider": "groq",
+    "enableFailover": true,
+    "groqApiKey": null,
+    "geminiApiKey": null
+  },
   "activeChats": [
-    "18097176627@s.whatsapp.net"
+    "18097176627@s.whatsapp.net",
+    "18093195369@s.whatsapp.net",
+    "176012239323262@s.whatsapp.net"
   ],
   "settings": {
     "minConfidenceForQA": 0.7,
@@ -17,6 +25,6 @@
     "qaMatches": 0,
     "geminiResponses": 0,
     "noMatches": 0,
-    "lastUpdated": "2026-02-06T02:34:05.904Z"
+    "lastUpdated": "2026-02-13T04:48:32.710Z"
   }
 }

@@ -27,9 +27,15 @@ export const dataApi = {
 
     // Attendance endpoints
     getAttendancesToday: (date: string) => api.get(`/data/attendance/today/${date}`),
+    getAttendancesByRange: (startDate: string, endDate: string) =>
+        api.get('/data/attendance/range', { params: { startDate, endDate } }),
+    updateAttendance: (id: string, data: any) => api.put(`/data/attendance/${id}`, data),
 
     // Absence endpoints
     getAbsencesToday: (date: string) => api.get(`/data/absences/today/${date}`),
+
+    // Contact endpoints
+    getAllContacts: () => api.get('/data/contacts'),
 
     // Teacher endpoints
     getAllTeachers: () => api.get('/data/teachers'),

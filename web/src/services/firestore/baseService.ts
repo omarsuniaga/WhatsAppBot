@@ -114,6 +114,9 @@ export class FirestoreService<T extends FirestoreDocument> {
      */
     async getById(id: string): Promise<T | null> {
         try {
+            if (!id || id.trim() === '') {
+                throw new Error(`Invalid ID: ID cannot be empty for collection ${this.collectionName}`);
+            }
             const docSnap = await getDoc(this.getDocRef(id));
             if (!docSnap.exists()) return null;
             const data = this.convertTimestamps(docSnap.data());

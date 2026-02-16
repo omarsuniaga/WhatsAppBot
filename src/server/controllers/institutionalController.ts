@@ -1,4 +1,4 @@
-/**
+﻿/**
  * Institutional Controller - CRUD endpoints for institutional data
  * 
  * Handles:
@@ -9,6 +9,7 @@
  */
 
 import { Request, Response } from 'express';
+import Logger from '../services/loggerService';
 import { ContactsRepository } from '../persistence/ContactsRepository';
 import { StudentsRepository } from '../persistence/StudentsRepository';
 import { TemplatesRepository } from '../persistence/TemplatesRepository';
@@ -18,6 +19,7 @@ import { TemplateService } from '../services/templateService';
 import { AttendanceService } from '../services/attendanceService';
 import AutomationService from '../services/automationService';
 import type { Contact, Student, Template, AttendanceStatus } from '../types/entities';
+import { getErrorMessage } from '../utils/errorUtils';
 
 // ==========================================
 // CONTACTS
@@ -45,11 +47,11 @@ export const getContacts = async (req: Request, res: Response) => {
             data: contacts,
             count: contacts.length
         });
-    } catch (error: any) {
-        console.error('[Contacts] Error fetching contacts:', error);
+    } catch (error: unknown) {
+        Logger.error('[Contacts] Error fetching contacts:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -70,10 +72,10 @@ export const getContactById = async (req: Request, res: Response) => {
             success: true,
             data: contact
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -133,10 +135,10 @@ export const createContact = async (req: Request, res: Response) => {
             success: true,
             data: contact
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -169,10 +171,10 @@ export const updateContact = async (req: Request, res: Response) => {
             success: true,
             data: contact
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -193,10 +195,10 @@ export const deleteContact = async (req: Request, res: Response) => {
             success: true,
             message: 'Contact deleted'
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -229,10 +231,10 @@ export const getStudents = async (req: Request, res: Response) => {
             data: students,
             count: students.length
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -253,10 +255,10 @@ export const getStudentById = async (req: Request, res: Response) => {
             success: true,
             data: student
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -309,10 +311,10 @@ export const createStudent = async (req: Request, res: Response) => {
             success: true,
             data: student
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -336,10 +338,10 @@ export const updateStudent = async (req: Request, res: Response) => {
             success: true,
             data: student
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -360,10 +362,10 @@ export const deleteStudent = async (req: Request, res: Response) => {
             success: true,
             message: 'Student deleted'
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -384,10 +386,10 @@ export const getStudentMetadata = async (req: Request, res: Response) => {
                 instruments
             }
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -418,10 +420,10 @@ export const getTemplates = async (req: Request, res: Response) => {
             data: templates,
             count: templates.length
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -442,10 +444,10 @@ export const getTemplateById = async (req: Request, res: Response) => {
             success: true,
             data: template
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -482,10 +484,10 @@ export const createTemplate = async (req: Request, res: Response) => {
             success: true,
             data: result.template
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -522,10 +524,10 @@ export const updateTemplate = async (req: Request, res: Response) => {
             success: true,
             data: template
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -546,10 +548,10 @@ export const deleteTemplate = async (req: Request, res: Response) => {
             success: true,
             message: 'Template deleted'
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -576,10 +578,10 @@ export const renderTemplate = async (req: Request, res: Response) => {
                 rendered: result.rendered
             }
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -607,10 +609,10 @@ export const previewTemplate = async (req: Request, res: Response) => {
                 extractedVariables: templateService.extractVariablesWithMeta(body)
             }
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -654,10 +656,10 @@ export const getAttendance = async (req: Request, res: Response) => {
             success: true,
             data: today
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -695,10 +697,10 @@ export const recordAttendance = async (req: Request, res: Response) => {
             success: true,
             data: updated
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -721,10 +723,10 @@ export const importAttendance = async (req: Request, res: Response) => {
             success: true,
             data: result
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -748,10 +750,10 @@ export const getStudentAttendanceSummary = async (req: Request, res: Response) =
             success: true,
             data: summary
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -779,10 +781,10 @@ export const getAttendanceStats = async (req: Request, res: Response) => {
             success: true,
             data: stats
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -809,10 +811,10 @@ export const getStudentsAtRisk = async (req: Request, res: Response) => {
                 students: atRisk
             }
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -873,10 +875,10 @@ export const generateAbsenceDrafts = async (req: Request, res: Response) => {
             success: result.success,
             data: result
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -894,10 +896,10 @@ export const getAbsenceTemplates = async (req: Request, res: Response) => {
             success: true,
             data: templates
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -932,10 +934,11 @@ export const previewAutomationDraft = async (req: Request, res: Response) => {
             success: true,
             data: draft
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
+

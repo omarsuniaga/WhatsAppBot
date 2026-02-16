@@ -2,17 +2,18 @@
  * Sidebar - WhatsApp Web style navigation sidebar
  */
 import { clsx } from 'clsx';
-import { 
-    MessageSquare, 
-    Phone, 
-    CircleDot, 
-    Users, 
-    Settings, 
+import {
+    MessageSquare,
+    Phone,
+    CircleDot,
+    Users,
+    Settings,
     LogOut,
     LayoutDashboard,
     Bell
 } from 'lucide-react';
 import { statusApi } from '../../api/client';
+import { GlobalBotSwitch } from '../bot';
 
 type SidebarTab = 'chats' | 'calls' | 'status' | 'groups' | 'admin';
 
@@ -102,6 +103,11 @@ export const Sidebar = ({ activeTab, onTabChange, onOpenAdmin, onOpenSettings, o
                         </span>
                     </button>
                 )}
+
+                {/* Global Bot Switch */}
+                <div className="my-2">
+                    <GlobalBotSwitch />
+                </div>
 
                 {/* Settings */}
                 <button

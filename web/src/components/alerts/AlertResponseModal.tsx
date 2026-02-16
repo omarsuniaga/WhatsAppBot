@@ -11,7 +11,9 @@ import {
     Lightbulb,
     AlertCircle,
     Loader2,
-    Trash2
+    Trash2,
+    Clock3,
+    CalendarClock
 } from 'lucide-react';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -20,7 +22,15 @@ import type { PendingAlert } from './AlertPanel';
 interface AlertResponseModalProps {
     alert: PendingAlert;
     onClose: () => void;
-    onRespond: (alertId: string, response: string, shouldLearn: boolean) => Promise<void>;
+    onRespond: (
+        alertId: string,
+        response: string,
+        shouldLearn: boolean,
+        options?: {
+            deliveryMode?: 'now' | 'scheduled' | 'manual';
+            scheduledFor?: string;
+        }
+    ) => Promise<void>;
     onDismiss: (alertId: string, reason?: string) => Promise<void>;
 }
 
@@ -41,13 +51,26 @@ export const AlertResponseModal = ({
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [dismissReason, setDismissReason] = useState('');
     const [showDismissInput, setShowDismissInput] = useState(false);
+    const [deliveryMode, setDeliveryMode] = useState<'now' | 'scheduled' | 'manual'>('now');
+    const [scheduledFor, setScheduledFor] = useState('');
 
     const handleSubmit = async () => {
         if (!response.trim() || isSubmitting) return;
+        if (deliveryMode === 'scheduled' && !scheduledFor) return;
+
+        let scheduledForIso: string | undefined;
+        if (deliveryMode === 'scheduled') {
+            const parsed = new Date(scheduledFor);
+            if (Number.isNaN(parsed.getTime())) return;
+            scheduledForIso = parsed.toISOString();
+        }
 
         setIsSubmitting(true);
         try {
-            await onRespond(alert.id, response.trim(), shouldLearn);
+            await onRespond(alert.id, response.trim(), shouldLearn, {
+                deliveryMode,
+                scheduledFor: scheduledForIso
+            });
         } finally {
             setIsSubmitting(false);
         }
@@ -73,7 +96,7 @@ export const AlertResponseModal = ({
     return (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
             {/* Backdrop */}
-            <div 
+            <div
                 className="absolute inset-0 bg-black/70"
                 onClick={onClose}
             />
@@ -169,6 +192,27 @@ export const AlertResponseModal = ({
                         </div>
                     </div>
 
+                    {/* AI Draft Response */}
+                    {alert.aiDraftResponse && (
+                        <div>
+                            <h4 className="text-sm font-medium text-[#8696a0] mb-3 flex items-center gap-2">
+                                <Brain className="w-4 h-4 text-[#00a884]" />
+                                Borrador sugerido por IA
+                            </h4>
+                            <div className="bg-[#2a3942] rounded-lg p-3">
+                                <p className="text-sm text-[#e9edef] italic mb-3">
+                                    "{alert.aiDraftResponse}"
+                                </p>
+                                <button
+                                    onClick={() => setResponse(alert.aiDraftResponse!)}
+                                    className="text-xs bg-[#00a884] hover:bg-[#00a884]/90 text-white px-3 py-1.5 rounded transition-colors"
+                                >
+                                    Usar este borrador
+                                </button>
+                            </div>
+                        </div>
+                    )}
+
                     {/* Suggested responses */}
                     <div>
                         <h4 className="text-sm font-medium text-[#8696a0] mb-3 flex items-center gap-2">
@@ -204,6 +248,71 @@ export const AlertResponseModal = ({
                         <p className="text-xs text-[#8696a0] mt-1">
                             Presiona Ctrl+Enter para enviar
                         </p>
+                    </div>
+
+                    {/* Delivery mode */}
+                    <div>
+                        <h4 className="text-sm font-medium text-[#8696a0] mb-3">
+                            Entrega de respuesta
+                        </h4>
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                            <button
+                                type="button"
+                                onClick={() => setDeliveryMode('now')}
+                                className={clsx(
+                                    "p-3 rounded-lg text-sm border transition-colors text-left",
+                                    deliveryMode === 'now'
+                                        ? "border-[#00a884] bg-[#00a884]/10 text-[#e9edef]"
+                                        : "border-[#374248] bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]"
+                                )}
+                            >
+                                <span className="flex items-center gap-2">
+                                    <Send className="w-4 h-4" />
+                                    Enviar ahora
+                                </span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setDeliveryMode('scheduled')}
+                                className={clsx(
+                                    "p-3 rounded-lg text-sm border transition-colors text-left",
+                                    deliveryMode === 'scheduled'
+                                        ? "border-[#00a884] bg-[#00a884]/10 text-[#e9edef]"
+                                        : "border-[#374248] bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]"
+                                )}
+                            >
+                                <span className="flex items-center gap-2">
+                                    <CalendarClock className="w-4 h-4" />
+                                    Programar
+                                </span>
+                            </button>
+                            <button
+                                type="button"
+                                onClick={() => setDeliveryMode('manual')}
+                                className={clsx(
+                                    "p-3 rounded-lg text-sm border transition-colors text-left",
+                                    deliveryMode === 'manual'
+                                        ? "border-[#00a884] bg-[#00a884]/10 text-[#e9edef]"
+                                        : "border-[#374248] bg-[#202c33] text-[#8696a0] hover:bg-[#2a3942]"
+                                )}
+                            >
+                                <span className="flex items-center gap-2">
+                                    <Clock3 className="w-4 h-4" />
+                                    Solo aprobar
+                                </span>
+                            </button>
+                        </div>
+
+                        {deliveryMode === 'scheduled' && (
+                            <div className="mt-3">
+                                <input
+                                    type="datetime-local"
+                                    value={scheduledFor}
+                                    onChange={(e) => setScheduledFor(e.target.value)}
+                                    className="w-full px-4 py-3 bg-[#2a3942] text-[#e9edef] rounded-lg focus:outline-none focus:ring-2 focus:ring-[#00a884]"
+                                />
+                            </div>
+                        )}
                     </div>
 
                     {/* Learning toggle */}
@@ -279,7 +388,7 @@ export const AlertResponseModal = ({
                     </button>
                     <button
                         onClick={handleSubmit}
-                        disabled={!response.trim() || isSubmitting}
+                        disabled={!response.trim() || isSubmitting || (deliveryMode === 'scheduled' && !scheduledFor)}
                         className="flex items-center gap-2 px-6 py-2 bg-[#00a884] hover:bg-[#06cf9c] text-white font-medium rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
                         {isSubmitting ? (
@@ -287,7 +396,7 @@ export const AlertResponseModal = ({
                         ) : (
                             <Send className="w-5 h-5" />
                         )}
-                        Enviar respuesta
+                        {deliveryMode === 'scheduled' ? 'Programar respuesta' : deliveryMode === 'manual' ? 'Aprobar sin enviar' : 'Enviar respuesta'}
                     </button>
                 </div>
             </div>

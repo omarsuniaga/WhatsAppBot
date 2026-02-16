@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import BotService from '../services/botService';
+import { getErrorMessage } from '../utils/errorUtils';
 
 export const sendText = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -20,10 +21,19 @@ export const sendText = async (req: Request, res: Response): Promise<void> => {
             success: true,
             data: result
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
+        if (getErrorMessage(error).includes('Connection is not ready')) {
+            res.status(503).json({
+                success: false,
+                error: 'WhatsApp connection is not ready',
+                hint: 'Scan QR and wait until status is connected'
+            });
+            return;
+        }
+
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -49,10 +59,10 @@ export const sendMedia = async (req: Request, res: Response): Promise<void> => {
             success: true,
             data: result
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -78,10 +88,10 @@ export const sendFile = async (req: Request, res: Response): Promise<void> => {
             success: true,
             data: result
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -107,10 +117,10 @@ export const sendAudio = async (req: Request, res: Response): Promise<void> => {
             success: true,
             data: result
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -134,10 +144,10 @@ export const sendLocation = async (req: Request, res: Response): Promise<void> =
             success: true,
             data: result
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -161,10 +171,10 @@ export const sendContact = async (req: Request, res: Response): Promise<void> =>
             success: true,
             data: result
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -188,10 +198,10 @@ export const sendPoll = async (req: Request, res: Response): Promise<void> => {
             success: true,
             data: result
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -215,10 +225,10 @@ export const sendSticker = async (req: Request, res: Response): Promise<void> =>
             success: true,
             data: result
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };

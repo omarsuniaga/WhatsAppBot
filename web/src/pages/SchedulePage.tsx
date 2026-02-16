@@ -21,6 +21,8 @@ import {
     maestrosService,
     salonesService
 } from '../services/firestore';
+import { InfoButton } from '../components/common/InfoButton';
+import { usePageInfo } from '../hooks/useViewInfo';
 
 // Generate time slots for grid display
 const TIME_SLOTS = Array.from({ length: END_HOUR - START_HOUR }, (_, i) =>
@@ -31,6 +33,7 @@ const TIME_SLOTS = Array.from({ length: END_HOUR - START_HOUR }, (_, i) =>
 
 export const SchedulePage = () => {
     const navigate = useNavigate();
+    const pageInfo = usePageInfo('schedule');
     const [classes, setClasses] = useState<ClassGroup[]>([]);
     const [loading, setLoading] = useState(true);
     const [viewMode, setViewMode] = useState<ViewMode>('week');
@@ -78,7 +81,8 @@ export const SchedulePage = () => {
                 };
 
                 // Get teacher names
-                const teacherId = clase.teacherId || clase.profesor_id;
+                const rawTeacherId = clase.teacherId || clase.profesor_id;
+                const teacherId = Array.isArray(rawTeacherId) ? rawTeacherId[0] : rawTeacherId;
                 const teacherObj = maestrosData.find(m => m.id === teacherId);
                 const teacherNames = teacherObj ? [`${teacherObj.name}`] : [];
 
@@ -242,9 +246,9 @@ export const SchedulePage = () => {
         return Array.from(roomNames);
     }, [classes]);
 
-    // Layout algorithm for handling overlapping events
+    // Layout algorithm for handling overlapping events (cluster + greedy column packing)
     const calculateLayout = (classesForDay: ClassGroup[], day: number) => {
-        // 1. Map to simplified events with start/end in minutes
+        // Phase A: Map to simplified event objects
         const events = classesForDay.map(c => {
             const schedule = c.schedules.find(s => s.dayOfWeek === day);
             if (!schedule) return null;
@@ -252,65 +256,81 @@ export const SchedulePage = () => {
                 id: c.id,
                 start: timeToMinutes(schedule.startTime),
                 end: timeToMinutes(schedule.endTime),
-                obj: c
             };
-        }).filter(e => e !== null) as { id: string, start: number, end: number, obj: ClassGroup }[];
+        }).filter((e): e is { id: string; start: number; end: number } => e !== null);
 
         if (events.length === 0) return {};
 
-        // 2. Sort by start time
-        events.sort((a, b) => a.start - b.start);
+        // Sort by start time, then by longest duration first (for stable assignment)
+        events.sort((a, b) => a.start - b.start || (b.end - b.start) - (a.end - a.start));
 
-        // 3. Group overlapping events
-        const columns: { id: string, start: number, end: number }[][] = [];
+        // Build overlap clusters (connected components via sweep line)
+        const clusters: (typeof events)[] = [];
+        let currentCluster: typeof events = [events[0]];
+        let clusterEnd = events[0].end;
 
-        events.forEach(event => {
-            let placed = false;
-            // Try to place in an existing column
-            for (const column of columns) {
-                const lastInColumn = column[column.length - 1];
-                if (lastInColumn.end <= event.start) {
-                    column.push(event);
-                    placed = true;
-                    break;
+        for (let i = 1; i < events.length; i++) {
+            if (events[i].start < clusterEnd) {
+                // Overlaps with current cluster
+                currentCluster.push(events[i]);
+                clusterEnd = Math.max(clusterEnd, events[i].end);
+            } else {
+                // No overlap — start new cluster
+                clusters.push(currentCluster);
+                currentCluster = [events[i]];
+                clusterEnd = events[i].end;
+            }
+        }
+        clusters.push(currentCluster);
+
+        // Phase B: Greedy column assignment within each cluster
+        const columnAssignment: Record<string, { col: number; maxCols: number }> = {};
+
+        for (const cluster of clusters) {
+            // columns[i] = end time of last event placed in column i
+            const columns: number[] = [];
+
+            for (const event of cluster) {
+                let placed = false;
+                for (let c = 0; c < columns.length; c++) {
+                    if (columns[c] <= event.start) {
+                        columns[c] = event.end;
+                        columnAssignment[event.id] = { col: c, maxCols: 0 };
+                        placed = true;
+                        break;
+                    }
+                }
+                if (!placed) {
+                    columnAssignment[event.id] = { col: columns.length, maxCols: 0 };
+                    columns.push(event.end);
                 }
             }
-            // If not placed, start a new column
-            if (!placed) {
-                columns.push([event]);
+
+            // Set maxCols for all events in this cluster
+            const maxCols = columns.length;
+            for (const event of cluster) {
+                columnAssignment[event.id].maxCols = maxCols;
             }
-        });
+        }
 
-        // 4. Calculate positions
-        const layout: Record<string, { left: string, width: string }> = {};
+        // Phase C: Convert column assignments to CSS layout values with gaps
+        const GAP_PX = 2;
+        const layout: Record<string, { left: string; width: string; col: number }> = {};
 
-        // This is a simplified columnation. 
-        // A better approach for visual overlap is "packing".
-        // But for now, we'll check distinct overlapping groups to optimize width.
-        // Actually, the simple "columns" approach above handles non-overlapping items in the same column nicely.
-        // We just need to know which events *concurrently* overlap to split width.
-
-        // Revised approach: "Expand" columns.
-        // If we have 2 columns, but an event in Col 1 has no overlap with Col 2 at its time, it can expand?
-        // For simplicity/robustness given the request: Just split width by max concurrent overlaps.
-
-        // Re-calculate max concurrent overlaps for each event
-        events.forEach(event => {
-            // Find all events that overlap with this one
-            const concurrent = events.filter(e =>
-                (e.start < event.end && e.end > event.start)
-            );
-
-            // Assign index based on start time sort order among concurrent
-            concurrent.sort((a, b) => a.start - b.start || (a.end - a.start) - (b.end - b.start));
-            const index = concurrent.findIndex(e => e.id === event.id);
-            const count = concurrent.length;
-
-            layout[event.id] = {
-                left: `${(index / count) * 100}%`,
-                width: `${100 / count}%`
-            };
-        });
+        for (const event of events) {
+            const { col, maxCols } = columnAssignment[event.id];
+            if (maxCols === 1) {
+                // Single event — use full width with side padding
+                layout[event.id] = { left: '4px', width: 'calc(100% - 8px)', col: 0 };
+            } else {
+                // Multiple columns — percentage-based with gap
+                layout[event.id] = {
+                    left: `calc(${(col / maxCols) * 100}% + ${GAP_PX / 2}px)`,
+                    width: `calc(${(1 / maxCols) * 100}% - ${GAP_PX}px)`,
+                    col,
+                };
+            }
+        }
 
         return layout;
     };
@@ -320,27 +340,25 @@ export const SchedulePage = () => {
         classGroup: ClassGroup;
         schedule: Schedule;
         onClick: () => void;
-        layoutStyle?: { left: string, width: string };
+        layoutStyle?: { left: string; width: string; col: number };
     }) => {
         const colors = PROGRAM_COLORS[classGroup.program] || PROGRAM_COLORS.orquesta;
         const top = getBlockPosition(schedule.startTime);
         const height = getBlockHeight(schedule.startTime, schedule.endTime);
 
-        // Default style if no layout provided
         const style: React.CSSProperties = {
             top: `${top}px`,
             height: `${height}px`,
-            minHeight: '30px',
+            minHeight: '40px',
             left: layoutStyle?.left || '4px',
-            right: layoutStyle ? 'auto' : '4px', // careful with right
             width: layoutStyle?.width || 'calc(100% - 8px)',
             position: 'absolute',
-            zIndex: 10
+            zIndex: 10 + (layoutStyle?.col ?? 0),
         };
 
         return (
             <div
-                className={`absolute ${colors.bg} ${colors.border} ${colors.text} border-l-4 rounded px-1 py-1 cursor-pointer hover:shadow-lg transition-shadow overflow-hidden group hover:z-50`}
+                className={`absolute ${colors.bg} ${colors.border} ${colors.text} border-l-4 rounded px-1 py-0.5 cursor-pointer hover:shadow-lg transition-shadow overflow-hidden group hover:z-50`}
                 style={style}
                 onClick={onClick}
                 title={`${classGroup.name} (${schedule.startTime} - ${schedule.endTime})`}
@@ -348,9 +366,14 @@ export const SchedulePage = () => {
                 <div className="font-medium text-xs leading-tight truncate group-hover:whitespace-normal">
                     {classGroup.name}
                 </div>
-                {height > 35 && (
-                    <div className="text-[10px] opacity-75 leading-tight">
-                        {schedule.startTime}
+                {height > 40 && (
+                    <div className="text-[10px] opacity-75 leading-tight truncate">
+                        {schedule.startTime} - {schedule.endTime}
+                    </div>
+                )}
+                {height > 55 && classGroup.teacherNames && classGroup.teacherNames.length > 0 && (
+                    <div className="text-[10px] opacity-60 leading-tight truncate">
+                        {classGroup.teacherNames[0]}
                     </div>
                 )}
             </div>
@@ -528,6 +551,13 @@ export const SchedulePage = () => {
                                 Gestión de horarios semanales • {filteredClasses.length} clases
                             </p>
                         </div>
+                        {pageInfo.hasInfo && (
+                            <InfoButton
+                                title={pageInfo.title}
+                                description={pageInfo.description}
+                                tips={pageInfo.tips}
+                            />
+                        )}
                     </div>
 
                     {/* View Mode Toggle */}

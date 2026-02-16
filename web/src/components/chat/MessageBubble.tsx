@@ -1,6 +1,6 @@
 import { clsx } from 'clsx';
 import { format } from 'date-fns';
-import { Image, FileText, Mic, MapPin, Contact, User } from 'lucide-react';
+import { Image, FileText, Mic, MapPin, Contact, User, File, Download } from 'lucide-react';
 import type { Message } from '../../types';
 import { MessageStatus } from '../common/MessageStatus';
 
@@ -74,13 +74,185 @@ export const MessageBubble = ({ message, isGroup = false, searchQuery, isSearchH
             video: 'Video',
             audio: 'Nota de voz',
             document: 'Documento',
-            location: 'Ubicacion',
+            location: 'Ubicación',
             contact: 'Contacto',
             sticker: 'Sticker',
             poll: 'Encuesta'
         };
 
-        return typeLabels[message.type] || 'Mensaje';
+        const baseLabel = typeLabels[message.type] || 'Mensaje';
+        
+        // Add enhanced information for media messages
+        if (message.isMedia && message.fileName) {
+            return `${baseLabel}: ${message.fileName}`;
+        }
+        
+        if (message.type === 'audio' && message.duration) {
+            const minutes = Math.floor(message.duration / 60);
+            const seconds = message.duration % 60;
+            return `${baseLabel} (${minutes}:${seconds.toString().padStart(2, '0')})`;
+        }
+        
+        if (message.type === 'location' && message.location?.name) {
+            return `${baseLabel}: ${message.location.name}`;
+        }
+        
+        if (message.type === 'contact' && message.contactInfo?.name) {
+            return `${baseLabel}: ${message.contactInfo.name}`;
+        }
+
+        return baseLabel;
+    };
+
+    // Media preview component
+    const MediaPreview = () => {
+        if (!message.mediaUrl || !message.isMedia) return null;
+
+        const handleDownload = () => {
+            if (message.mediaUrl) {
+                const link = document.createElement('a');
+                link.href = message.mediaUrl;
+                link.download = message.fileName || 'media';
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            }
+        };
+
+        switch (message.type) {
+            case 'image':
+                return (
+                    <div className="mt-2 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
+                        <img
+                            src={message.mediaUrl}
+                            alt={message.body || 'Imagen'}
+                            className="max-w-full h-auto rounded cursor-pointer hover:opacity-90 transition-opacity"
+                            onClick={() => window.open(message.mediaUrl, '_blank')}
+                        />
+                        {message.hasCaption && message.body && (
+                            <p className="p-2 text-sm text-gray-700 dark:text-gray-300">
+                                {highlightText(message.body)}
+                            </p>
+                        )}
+                    </div>
+                );
+
+            case 'video':
+                return (
+                    <div className="mt-2 rounded-lg overflow-hidden bg-gray-100 dark:bg-gray-800">
+                        <video
+                            src={message.mediaUrl}
+                            controls
+                            className="max-w-full h-auto rounded"
+                            poster={message.body ? undefined : undefined}
+                        />
+                        {message.hasCaption && message.body && (
+                            <p className="p-2 text-sm text-gray-700 dark:text-gray-300">
+                                {highlightText(message.body)}
+                            </p>
+                        )}
+                    </div>
+                );
+
+            case 'audio':
+                return (
+                    <div className="mt-2 bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
+                        <audio
+                            src={message.mediaUrl}
+                            controls
+                            className="w-full"
+                        />
+                        {message.duration && (
+                            <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+                                Duración: {Math.floor(message.duration / 60)}:{(message.duration % 60).toString().padStart(2, '0')}
+                            </p>
+                        )}
+                    </div>
+                );
+
+            case 'document':
+                return (
+                    <div className="mt-2 bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
+                        <div className="flex items-center space-x-3">
+                            <File className="w-8 h-8 text-gray-500 dark:text-gray-400" />
+                            <div className="flex-1 min-w-0">
+                                <p className="text-sm font-medium text-gray-900 dark:text-gray-100 truncate">
+                                    {message.fileName || 'Documento'}
+                                </p>
+                                {message.fileSize && (
+                                    <p className="text-xs text-gray-500 dark:text-gray-400">
+                                        {(message.fileSize / 1024 / 1024).toFixed(2)} MB
+                                    </p>
+                                )}
+                            </div>
+                            <button
+                                onClick={handleDownload}
+                                className="p-2 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 transition-colors"
+                                title="Descargar"
+                            >
+                                <Download className="w-4 h-4" />
+                            </button>
+                        </div>
+                        {message.hasCaption && message.body && (
+                            <p className="mt-2 text-sm text-gray-700 dark:text-gray-300">
+                                {highlightText(message.body)}
+                            </p>
+                        )}
+                    </div>
+                );
+
+            default:
+                return null;
+        }
+    };
+
+    // Location preview component
+    const LocationPreview = () => {
+        if (!message.location) return null;
+
+        const mapsUrl = `https://maps.google.com/?q=${message.location.lat},${message.location.lng}`;
+
+        return (
+            <div className="mt-2 bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
+                <div className="flex items-center space-x-3">
+                    <MapPin className="w-8 h-8 text-red-500" />
+                    <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            {message.location.name || 'Ubicación'}
+                        </p>
+                        <a
+                            href={mapsUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-xs text-blue-500 hover:text-blue-600 transition-colors"
+                        >
+                            Ver en mapa
+                        </a>
+                    </div>
+                </div>
+            </div>
+        );
+    };
+
+    // Contact preview component
+    const ContactPreview = () => {
+        if (!message.contactInfo) return null;
+
+        return (
+            <div className="mt-2 bg-gray-100 dark:bg-gray-800 rounded-lg p-3">
+                <div className="flex items-center space-x-3">
+                    <Contact className="w-8 h-8 text-blue-500" />
+                    <div className="flex-1">
+                        <p className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                            {message.contactInfo.name}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                            Contacto
+                        </p>
+                    </div>
+                </div>
+            </div>
+        );
     };
 
     // Highlight search matches in text
@@ -147,9 +319,23 @@ export const MessageBubble = ({ message, isGroup = false, searchQuery, isSearchH
                 {/* Message content */}
                 <div className="flex items-start">
                     {message.type !== 'text' && getTypeIcon()}
-                    <p className="text-sm whitespace-pre-wrap break-words overflow-hidden" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
-                        {highlightText(getMessageContent())}
-                    </p>
+                    <div className="flex-1">
+                        {/* Text content for non-media messages or captions */}
+                        {(!message.isMedia || message.hasCaption) && (
+                            <p className="text-sm whitespace-pre-wrap break-words overflow-hidden" style={{ wordBreak: 'break-word', overflowWrap: 'break-word' }}>
+                                {highlightText(getMessageContent())}
+                            </p>
+                        )}
+                        
+                        {/* Media previews */}
+                        <MediaPreview />
+                        
+                        {/* Location preview */}
+                        <LocationPreview />
+                        
+                        {/* Contact preview */}
+                        <ContactPreview />
+                    </div>
                 </div>
 
                 {/* Time and status */}

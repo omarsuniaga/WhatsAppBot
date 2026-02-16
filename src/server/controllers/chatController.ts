@@ -1,4 +1,5 @@
-import { Request, Response } from 'express';
+﻿import { Request, Response } from 'express';
+import Logger from '../services/loggerService';
 import BotService from '../services/botService';
 import ProfileCacheService from '../services/profileCacheService';
 import ReadStateService from '../services/readStateService';
@@ -6,6 +7,7 @@ import ContactStoreService from '../services/contactStoreService';
 import ChatStateService from '../services/chatStateService';
 import { normalizeRawJid, toStableKey, isGroupJid, extractPhoneNumber } from '../utils/jidUtils';
 import { BotOrchestrator } from '../../agents/BotOrchestrator';
+import { getErrorMessage } from '../utils/errorUtils';
 
 const profileCacheService = ProfileCacheService.getInstance();
 const readStateService = ReadStateService.getInstance();
@@ -19,12 +21,12 @@ const getLastMessageText = (message: any): string => {
         msg.extendedTextMessage?.text ||
         msg.imageMessage?.caption ||
         msg.videoMessage?.caption ||
-        (msg.imageMessage ? '📷 Foto' : '') ||
-        (msg.videoMessage ? '🎥 Video' : '') ||
-        (msg.audioMessage ? '🎤 Audio' : '') ||
-        (msg.stickerMessage ? '🎨 Sticker' : '') ||
-        (msg.documentMessage ? '📄 Documento' : '') ||
-        (msg.locationMessage ? '📍 Ubicación' : '') ||
+        (msg.imageMessage ? 'ðŸ“· Foto' : '') ||
+        (msg.videoMessage ? 'ðŸŽ¥ Video' : '') ||
+        (msg.audioMessage ? 'ðŸŽ¤ Audio' : '') ||
+        (msg.stickerMessage ? 'ðŸŽ¨ Sticker' : '') ||
+        (msg.documentMessage ? 'ðŸ“„ Documento' : '') ||
+        (msg.locationMessage ? 'ðŸ“ UbicaciÃ³n' : '') ||
         '';
 };
 
@@ -33,7 +35,7 @@ export const getChats = async (req: Request, res: Response): Promise<void> => {
         const botService = BotService.getInstance();
         const store = botService.getStore();
 
-        // ✅ OPTIMIZATION: Add pagination support
+        // âœ… OPTIMIZATION: Add pagination support
         const limit = Math.min(parseInt(req.query.limit as string) || 50, 200);
         const offset = parseInt(req.query.offset as string) || 0;
 
@@ -48,12 +50,12 @@ export const getChats = async (req: Request, res: Response): Promise<void> => {
         const chats: any[] = [];
         const seenJids = new Set<string>();
 
-        // ✅ OPTIMIZATION: Removed pre-populate message scan
+        // âœ… OPTIMIZATION: Removed pre-populate message scan
         // This was O(n*20) complexity - scanning 20 messages per chat
         // Was causing 400-800ms delay in API response
         // Display names are resolved later in Method 2 & 3 anyway
 
-        // ✅ OPTIMIZATION: Removed synchronous refreshContacts()
+        // âœ… OPTIMIZATION: Removed synchronous refreshContacts()
         // This was blocking the request
         // Contacts are refreshed in the background by BotService
 
@@ -124,7 +126,7 @@ export const getChats = async (req: Request, res: Response): Promise<void> => {
                     }
 
                     // 3. Try to get from last message pushName
-                    const messages = store.messages?.[chat.id];
+                    const messages = store.messages?.get?.(chat.id);
                     if (displayName === 'Unknown' && messages?.array?.length > 0) {
                         const lastMessage = messages.array[messages.array.length - 1];
                         if (lastMessage?.pushName) {
@@ -139,7 +141,7 @@ export const getChats = async (req: Request, res: Response): Promise<void> => {
 
                 if (isGroup) {
                     try {
-                        // ✅ OPTIMIZATION: Add timeout to group metadata fetch
+                        // âœ… OPTIMIZATION: Add timeout to group metadata fetch
                         // Prevents slow groups from blocking the entire API response
                         const metadataPromise = botService.getGroupMetadata(chat.id);
                         const timeoutPromise = new Promise((_, reject) =>
@@ -158,7 +160,7 @@ export const getChats = async (req: Request, res: Response): Promise<void> => {
                         }
                     } catch (error) {
                         // Group metadata might not be available or timed out
-                        console.warn(`Could not get metadata for group ${chat.id}:`, (error as any).message);
+                        Logger.warn(`Could not get metadata for group ${chat.id}:`, (error as any).message);
                     }
                 }
 
@@ -184,7 +186,9 @@ export const getChats = async (req: Request, res: Response): Promise<void> => {
         const messagesStore = store.messages;
         if (messagesStore) {
             const existingPhones = new Set(chats.map(c => c.jid.split('@')[0]));
-            const messageJids = Object.keys(messagesStore);
+            const messageJids = messagesStore instanceof Map
+                ? Array.from(messagesStore.keys())
+                : Object.keys(messagesStore);
 
             for (const jid of messageJids) {
                 if (jid === 'status@broadcast') continue;
@@ -193,7 +197,7 @@ export const getChats = async (req: Request, res: Response): Promise<void> => {
                 if (existingPhones.has(phoneNumber)) continue;
                 existingPhones.add(phoneNumber);
 
-                const messages = messagesStore[jid];
+                const messages = messagesStore instanceof Map ? messagesStore.get(jid) : messagesStore[jid];
                 const msgArray = messages?.array || messages;
                 const lastMsg = Array.isArray(msgArray) ? msgArray[msgArray.length - 1] : null;
 
@@ -232,8 +236,8 @@ export const getChats = async (req: Request, res: Response): Promise<void> => {
                     }
 
                     // 2. Try direct contact from store
-                    if (displayName === 'Unknown' && store.contacts?.[normalizedJid]) {
-                        const contact = store.contacts[normalizedJid];
+                    const contact = store.contacts instanceof Map ? store.contacts.get(normalizedJid) : store.contacts?.[normalizedJid];
+                    if (displayName === 'Unknown' && contact) {
                         displayName = contact.name || contact.pushName || contact.notify ||
                             contact.verifiedName || contact.formattedName ||
                             `+${phoneNumber}`;
@@ -245,7 +249,7 @@ export const getChats = async (req: Request, res: Response): Promise<void> => {
                     }
                 }
 
-                console.log(`Messages-based contact ${normalizedJid}: Display name resolved to "${displayName}", unread: ${unreadCount}`);
+                Logger.info(`Messages-based contact ${normalizedJid}: Display name resolved to "${displayName}", unread: ${unreadCount}`);
 
                 chats.push({
                     jid: normalizedJid,
@@ -287,7 +291,7 @@ export const getChats = async (req: Request, res: Response): Promise<void> => {
 
             // Debug: Log JID normalization for first few chats
             if (chatIndex < 3) {
-                console.log(`[ChatController] JID: raw="${chat.jid}" normalized="${normalizedJid}" stableKey="${stableKey}"`);
+                Logger.info(`[ChatController] JID: raw="${chat.jid}" normalized="${normalizedJid}" stableKey="${stableKey}"`);
             }
 
             // Find messages using multiple possible JID formats
@@ -299,7 +303,7 @@ export const getChats = async (req: Request, res: Response): Promise<void> => {
 
             let lastMsg: any = null;
             for (const tryJid of possibleJids) {
-                const msgs = store.messages[tryJid];
+                const msgs = store.messages instanceof Map ? store.messages.get(tryJid) : store.messages[tryJid];
                 if (msgs?.array?.length > 0) {
                     lastMsg = msgs.array.slice(-1)[0];
                     break;
@@ -334,7 +338,7 @@ export const getChats = async (req: Request, res: Response): Promise<void> => {
 
             // Debug log for first few chats
             if (chatIndex < 3) {
-                console.log(`[ChatController] Chat stableKey=${stableKey}: displayName="${displayName}", unread=${unreadCount}`);
+                Logger.info(`[ChatController] Chat stableKey=${stableKey}: displayName="${displayName}", unread=${unreadCount}`);
             }
             chatIndex++;
 
@@ -371,14 +375,14 @@ export const getChats = async (req: Request, res: Response): Promise<void> => {
 
         // CRITICAL DEBUG: Log first 3 chats to verify stableKey and displayName are set
         if (finalChatsWithReadState.length > 0) {
-            console.log('[ChatController] === API RESPONSE SAMPLE ===');
+            Logger.info('[ChatController] === API RESPONSE SAMPLE ===');
             finalChatsWithReadState.slice(0, 3).forEach((c, i) => {
-                console.log(`[ChatController] Chat ${i}: jid="${c.jid}" stableKey="${c.stableKey}" displayName="${c.displayName}" unread=${c.unreadCount}`);
+                Logger.info(`[ChatController] Chat ${i}: jid="${c.jid}" stableKey="${c.stableKey}" displayName="${c.displayName}" unread=${c.unreadCount}`);
             });
-            console.log('[ChatController] === END SAMPLE ===');
+            Logger.info('[ChatController] === END SAMPLE ===');
         }
 
-        // ✅ OPTIMIZATION: Apply pagination to response
+        // âœ… OPTIMIZATION: Apply pagination to response
         const totalChats = finalChatsWithReadState.length;
         const paginatedChats = limit > 0
             ? finalChatsWithReadState.slice(offset, offset + limit)
@@ -395,11 +399,11 @@ export const getChats = async (req: Request, res: Response): Promise<void> => {
                 nextOffset: Math.min(offset + limit, totalChats)
             }
         });
-    } catch (error: any) {
-        console.error('Error getting chats:', error);
+    } catch (error: unknown) {
+        Logger.error('Error getting chats:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -412,8 +416,8 @@ export const diagnoseChatLoadVisual = async (req: Request, res: Response): Promi
 
         if (!store) {
             res.send(`
-                <h1>❌ Error: Store not available</h1>
-                <p>El bot no está inicializado. Intenta reconectar.</p>
+                <h1>âŒ Error: Store not available</h1>
+                <p>El bot no estÃ¡ inicializado. Intenta reconectar.</p>
             `);
             return;
         }
@@ -439,8 +443,8 @@ export const diagnoseChatLoadVisual = async (req: Request, res: Response): Promi
             conversionMethod = 'Object.values()';
         }
 
-        const messagesCount = Object.keys(store.messages || {}).length;
-        const contactsCount = Object.keys(store.contacts || {}).length;
+        const messagesCount = store.messages instanceof Map ? store.messages.size : Object.keys(store.messages || {}).length;
+        const contactsCount = store.contacts instanceof Map ? store.contacts.size : Object.keys(store.contacts || {}).length;
 
         // Full flow count
         const chats: any[] = [];
@@ -460,7 +464,7 @@ export const diagnoseChatLoadVisual = async (req: Request, res: Response): Promi
         const method2Only: any[] = [];
         if (messagesStore) {
             const existingPhones = new Set(chats.map(c => c.id.split('@')[0]));
-            const messageJids = Object.keys(messagesStore);
+            const messageJids = messagesStore instanceof Map ? Array.from(messagesStore.keys()) : Object.keys(messagesStore);
 
             for (const jid of messageJids) {
                 if (jid === 'status@broadcast') continue;
@@ -500,11 +504,11 @@ export const diagnoseChatLoadVisual = async (req: Request, res: Response): Promi
 </head>
 <body>
     <div class="container">
-        <h1>🔍 WhatsApp Bot - Chat Diagnostics</h1>
+        <h1>ðŸ” WhatsApp Bot - Chat Diagnostics</h1>
         <p>Timestamp: ${new Date().toISOString()}</p>
 
         <div class="section success">
-            <h2>📊 Store Inventory</h2>
+            <h2>ðŸ“Š Store Inventory</h2>
             <div class="metric">
                 <div class="metric-val">${allChats.length}</div>
                 <div class="metric-label">Chats in store.chats</div>
@@ -520,7 +524,7 @@ export const diagnoseChatLoadVisual = async (req: Request, res: Response): Promi
         </div>
 
         <div class="section ${totalChats > 1 ? 'success' : 'warning'}">
-            <h2>✅ Total Chats Available</h2>
+            <h2>âœ… Total Chats Available</h2>
             <div class="metric">
                 <div class="metric-val" style="color: ${totalChats > 1 ? '#00cc66' : '#ffaa00'}">${totalChats}</div>
                 <div class="metric-label">Chats from Method 1 + Method 2</div>
@@ -545,25 +549,25 @@ export const diagnoseChatLoadVisual = async (req: Request, res: Response): Promi
 
             ${totalChats === 0 ? `
                 <div class="recommendation" style="background: #3a1a1a; border-left: 3px solid #cc0000;">
-                    <strong>❌ CRITICAL:</strong> No chats found in Baileys store!
-                    <br>• Check if WhatsApp is connected
-                    <br>• Verify Baileys session is loaded
-                    <br>• Try reconnecting the bot
+                    <strong>âŒ CRITICAL:</strong> No chats found in Baileys store!
+                    <br>â€¢ Check if WhatsApp is connected
+                    <br>â€¢ Verify Baileys session is loaded
+                    <br>â€¢ Try reconnecting the bot
                 </div>
             ` : totalChats === 1 ? `
                 <div class="recommendation" style="background: #3a2a1a;">
-                    <strong>⚠️ WARNING:</strong> Only 1 chat found. This may be correct if the user has only 1 conversation.
+                    <strong>âš ï¸ WARNING:</strong> Only 1 chat found. This may be correct if the user has only 1 conversation.
                 </div>
             ` : `
                 <div class="recommendation">
-                    <strong>✅ OK:</strong> ${totalChats} chats available. 
+                    <strong>âœ… OK:</strong> ${totalChats} chats available. 
                     <br>If frontend still shows only 1, the problem is in frontend filtering.
                 </div>
             `}
         </div>
 
         <div class="section">
-            <h2>🔧 Store Structure</h2>
+            <h2>ðŸ”§ Store Structure</h2>
             <table>
                 <tr><th>Component</th><th>Type</th><th>Status</th></tr>
                 <tr>
@@ -585,7 +589,7 @@ export const diagnoseChatLoadVisual = async (req: Request, res: Response): Promi
         </div>
 
         <div class="section">
-            <h2>📝 Sample Chats (First 5)</h2>
+            <h2>ðŸ“ Sample Chats (First 5)</h2>
             <table>
                 <tr><th>Source</th><th>JID/Phone</th><th>Name</th><th>Type</th></tr>
                 ${allChats.slice(0, 5).map((c: any) => `
@@ -593,7 +597,7 @@ export const diagnoseChatLoadVisual = async (req: Request, res: Response): Promi
                         <td>store.chats</td>
                         <td>${c.id || 'N/A'}</td>
                         <td>${c.name || c.subject || 'Unknown'}</td>
-                        <td>${c.id?.includes('@g.us') ? '👥 Group' : '👤 Contact'}</td>
+                        <td>${c.id?.includes('@g.us') ? 'ðŸ‘¥ Group' : 'ðŸ‘¤ Contact'}</td>
                     </tr>
                 `).join('')}
                 ${method2Only.slice(0, 5).map((c: any) => `
@@ -608,14 +612,14 @@ export const diagnoseChatLoadVisual = async (req: Request, res: Response): Promi
         </div>
 
         <div class="section">
-            <h2>🎯 Diagnosis</h2>
+            <h2>ðŸŽ¯ Diagnosis</h2>
             ${totalChats === 0 ? `
                 <p><strong>Problem:</strong> BACKEND - No chats in Baileys store</p>
                 <p><strong>Next Steps:</strong></p>
                 <ol>
                     <li>Check WhatsApp connection status</li>
                     <li>Verify Baileys session file exists</li>
-                    <li>Try: Settings → Reconectar</li>
+                    <li>Try: Settings â†’ Reconectar</li>
                     <li>Contact support if issue persists</li>
                 </ol>
             ` : totalChats === 1 ? `
@@ -630,9 +634,9 @@ export const diagnoseChatLoadVisual = async (req: Request, res: Response): Promi
                 <p><strong>Problem:</strong> FRONTEND - Backend has ${totalChats} chats but UI shows only 1</p>
                 <p><strong>Next Steps:</strong></p>
                 <ol>
-                    <li>Open DevTools (F12) → Console tab</li>
+                    <li>Open DevTools (F12) â†’ Console tab</li>
                     <li>Look for "[ChatList]" logs</li>
-                    <li>Check if "No leídos" filter is active</li>
+                    <li>Check if "No leÃ­dos" filter is active</li>
                     <li>Try clicking "Todos" to reset filters</li>
                     <li>If still broken, check: "Filtering pipeline final: X" in console</li>
                 </ol>
@@ -642,8 +646,8 @@ export const diagnoseChatLoadVisual = async (req: Request, res: Response): Promi
         <div class="section">
             <p style="font-size: 12px; color: #666;">
                 <strong>API Endpoints for debugging:</strong>
-                <br>• JSON data: <code><a href="/api/chats/diagnostics/chat-load" style="color: #0099ff;">/api/chats/diagnostics/chat-load</a></code>
-                <br>• This visual: <code><a href="/api/chats/diagnostics/visual" style="color: #0099ff;">/api/chats/diagnostics/visual</a></code>
+                <br>â€¢ JSON data: <code><a href="/api/chats/diagnostics/chat-load" style="color: #0099ff;">/api/chats/diagnostics/chat-load</a></code>
+                <br>â€¢ This visual: <code><a href="/api/chats/diagnostics/visual" style="color: #0099ff;">/api/chats/diagnostics/visual</a></code>
             </p>
         </div>
     </div>
@@ -653,10 +657,10 @@ export const diagnoseChatLoadVisual = async (req: Request, res: Response): Promi
 
         res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.send(html);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.send(`
-            <h1>❌ Diagnostic Error</h1>
-            <pre>${error.message}\n${error.stack}</pre>
+            <h1>âŒ Diagnostic Error</h1>
+            <pre>${getErrorMessage(error)}\n${error instanceof Error ? error.stack : ''}</pre>
         `);
     }
 };
@@ -732,12 +736,12 @@ export const diagnoseChatLoad = async (req: Request, res: Response): Promise<voi
             })(),
 
             // 3. Diagnose store.messages
-            messagesCount: Object.keys(store.messages || {}).length,
-            messagesKeys: Object.keys(store.messages || {}).slice(0, 5),
+            messagesCount: store.messages instanceof Map ? store.messages.size : Object.keys(store.messages || {}).length,
+            messagesKeys: store.messages instanceof Map ? Array.from(store.messages.keys()).slice(0, 5) : Object.keys(store.messages || {}).slice(0, 5),
 
             // 4. Diagnose store.contacts
-            contactsCount: Object.keys(store.contacts || {}).length,
-            contactsKeys: Object.keys(store.contacts || {}).slice(0, 5),
+            contactsCount: store.contacts instanceof Map ? store.contacts.size : Object.keys(store.contacts || {}).length,
+            contactsKeys: store.contacts instanceof Map ? Array.from(store.contacts.keys()).slice(0, 5) : Object.keys(store.contacts || {}).slice(0, 5),
 
             // 5. Full flow test
             fullFlow: (() => {
@@ -765,7 +769,7 @@ export const diagnoseChatLoad = async (req: Request, res: Response): Promise<voi
                     const messagesStore = store.messages;
                     if (messagesStore) {
                         const existingPhones = new Set(chats.map(c => c.id.split('@')[0]));
-                        const messageJids = Object.keys(messagesStore);
+                        const messageJids = messagesStore instanceof Map ? Array.from(messagesStore.keys()) : Object.keys(messagesStore);
 
                         for (const jid of messageJids) {
                             if (jid === 'status@broadcast') continue;
@@ -793,9 +797,9 @@ export const diagnoseChatLoad = async (req: Request, res: Response): Promise<voi
         };
 
         res.json(diagnosis);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.json({
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -803,7 +807,8 @@ export const diagnoseChatLoad = async (req: Request, res: Response): Promise<voi
 export const getChatMessages = async (req: Request, res: Response): Promise<void> => {
     try {
         const { jid } = req.params;
-        const limit = parseInt(req.query.limit as string) || 50;
+        const limit = Math.min(parseInt(req.query.limit as string) || 50, 100); // Max 100 messages
+        const beforeMessageId = req.query.before as string; // For pagination
 
         if (!jid) {
             res.status(400).json({
@@ -813,14 +818,14 @@ export const getChatMessages = async (req: Request, res: Response): Promise<void
             return;
         }
 
-        console.log(`Fetching messages for JID: ${jid}, limit: ${limit} `);
+        Logger.info(`Fetching messages for JID: ${jid}, limit: ${limit} `);
 
         const botService = BotService.getInstance();
         const store = botService.getStore();
         const isGroup = jid.includes('@g.us');
 
         if (!store) {
-            console.log('Store not available');
+            Logger.info('Store not available');
             res.status(503).json({
                 success: false,
                 error: 'Bot not initialized or store not available'
@@ -828,13 +833,27 @@ export const getChatMessages = async (req: Request, res: Response): Promise<void
             return;
         }
 
-        // Try to fetch messages from WA with better error handling
+        // Try to fetch messages from WA with enhanced history support
         try {
-            console.log(`Attempting to fetch messages from WA for ${jid}`);
-            const fetchedMessages = await botService.fetchMessagesFromWA(jid, limit);
-            console.log(`Fetched ${fetchedMessages.length} messages from WA for ${jid}`);
+            Logger.info(`Attempting to fetch enhanced message history from WA for ${jid}${beforeMessageId ? ` before ${beforeMessageId}` : ''}`);
+            const fetchedMessages = await botService.fetchMessagesFromWA(jid, limit, beforeMessageId);
+            Logger.info(`Fetched ${fetchedMessages.length} enhanced messages from WA for ${jid}`);
+
+            // If we got messages from WA, return them directly (they're already processed)
+            if (fetchedMessages.length > 0) {
+                Logger.info(`Returning ${fetchedMessages.length} messages from WA for ${jid}`);
+                res.json({
+                    success: true,
+                    data: fetchedMessages,
+                    isGroup,
+                    totalFound: fetchedMessages.length,
+                    hasMore: fetchedMessages.length === limit, // Indicate if there might be more messages
+                    source: 'whatsapp_api'
+                });
+                return;
+            }
         } catch (fetchError: any) {
-            console.warn(`Failed to fetch messages from WA for ${jid}: `, fetchError.message);
+            Logger.warn(`Failed to fetch enhanced messages from WA for ${jid}: `, fetchError.message);
         }
 
         const messagesStore = store.messages;
@@ -844,20 +863,20 @@ export const getChatMessages = async (req: Request, res: Response): Promise<void
         const phoneNumber = jid.split('@')[0];
         const possibleJids = [
             jid,
-            `${phoneNumber} @s.whatsapp.net`,
-            `${phoneNumber} @lid`,
-            `${phoneNumber} @c.us`
+            `${phoneNumber}@s.whatsapp.net`,
+            `${phoneNumber}@lid`,
+            `${phoneNumber}@c.us`
         ];
 
-        console.log(`Trying JID formats for ${jid}: `, possibleJids);
+        Logger.info(`Trying JID formats for ${jid}: `, possibleJids);
 
         for (const tryJid of possibleJids) {
-            if (messagesStore && messagesStore[tryJid]) {
-                const chatMessages = messagesStore[tryJid];
+            const chatMessages = messagesStore instanceof Map ? messagesStore.get(tryJid) : messagesStore[tryJid];
+            if (chatMessages) {
                 const msgArray = chatMessages.array || chatMessages;
 
                 if (Array.isArray(msgArray) && msgArray.length > 0) {
-                    console.log(`Found ${msgArray.length} messages for JID ${tryJid}`);
+                    Logger.info(`Found ${msgArray.length} messages for JID ${tryJid}`);
 
                     // Collect unique sender JIDs for group chats
                     const senderJids = new Set<string>();
@@ -878,7 +897,7 @@ export const getChatMessages = async (req: Request, res: Response): Promise<void
                                 Array.from(senderJids)
                             );
                         } catch (profileError) {
-                            console.warn('Failed to fetch profile pictures:', profileError);
+                            Logger.warn('Failed to fetch profile pictures:', profileError);
                         }
                     }
 
@@ -919,7 +938,7 @@ export const getChatMessages = async (req: Request, res: Response): Promise<void
 
                     if (processedMessages.length > 0) {
                         messages = processedMessages;
-                        console.log(`Successfully processed ${messages.length} messages for ${jid}`);
+                        Logger.info(`Successfully processed ${messages.length} messages for ${jid}`);
                         break;
                     }
                 }
@@ -928,14 +947,14 @@ export const getChatMessages = async (req: Request, res: Response): Promise<void
 
         // If still no messages, try one more approach - check if we can get them directly from the store
         if (messages.length === 0) {
-            console.log(`No messages found for ${jid}, trying direct store access`);
+            Logger.info(`No messages found for ${jid}, trying direct store access`);
             try {
                 // Try to get from store directly using BaileysClass method
                 const bot = botService.getBot();
                 if (bot && typeof bot.getMessagesFromStore === 'function') {
                     const directMessages = bot.getMessagesFromStore(jid, limit);
                     if (directMessages && directMessages.length > 0) {
-                        console.log(`Found ${directMessages.length} messages via direct store access`);
+                        Logger.info(`Found ${directMessages.length} messages via direct store access`);
                         messages = directMessages.map((msg: any) => ({
                             id: msg.key?.id || Math.random().toString(36),
                             from: msg.key?.remoteJid || jid,
@@ -948,11 +967,11 @@ export const getChatMessages = async (req: Request, res: Response): Promise<void
                     }
                 }
             } catch (directError) {
-                console.warn('Direct store access failed:', directError);
+                Logger.warn('Direct store access failed:', directError);
             }
         }
 
-        console.log(`Final result: ${messages.length} messages for ${jid}`);
+        Logger.info(`Final result: ${messages.length} messages for ${jid}`);
 
         res.json({
             success: true,
@@ -960,11 +979,11 @@ export const getChatMessages = async (req: Request, res: Response): Promise<void
             isGroup,
             totalFound: messages.length
         });
-    } catch (error: any) {
-        console.error('Error getting chat messages:', error);
+    } catch (error: unknown) {
+        Logger.error('Error getting chat messages:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -992,10 +1011,10 @@ export const toggleBot = async (req: Request, res: Response): Promise<void> => {
                 botActive: !!active
             }
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -1024,13 +1043,13 @@ function getMessageBody(message: any): string {
         message.documentMessage?.caption ||
         message.locationMessage?.name ||
         message.contactMessage?.displayName ||
-        (message.imageMessage ? '📷 Foto' : '') ||
-        (message.videoMessage ? '🎥 Video' : '') ||
-        (message.audioMessage ? '🎤 Audio' : '') ||
-        (message.stickerMessage ? '🎨 Sticker' : '') ||
-        (message.documentMessage ? '📄 Documento' : '') ||
-        (message.locationMessage ? '📍 Ubicación' : '') ||
-        (message.pollCreationMessage ? '📊 Encuesta' : '') ||
+        (message.imageMessage ? 'ðŸ“· Foto' : '') ||
+        (message.videoMessage ? 'ðŸŽ¥ Video' : '') ||
+        (message.audioMessage ? 'ðŸŽ¤ Audio' : '') ||
+        (message.stickerMessage ? 'ðŸŽ¨ Sticker' : '') ||
+        (message.documentMessage ? 'ðŸ“„ Documento' : '') ||
+        (message.locationMessage ? 'ðŸ“ UbicaciÃ³n' : '') ||
+        (message.pollCreationMessage ? 'ðŸ“Š Encuesta' : '') ||
         '';
 }
 
@@ -1074,6 +1093,108 @@ function getMessageAck(msg: any): number {
 }
 
 /**
+ * Get complete chat history with pagination support
+ * This endpoint specifically fetches historical messages from WhatsApp
+ * beyond what's available in the real-time store
+ */
+export const getChatHistory = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const { jid } = req.params;
+        const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+        const beforeMessageId = req.query.before as string;
+        const includeMedia = req.query.includeMedia === 'true';
+
+        if (!jid) {
+            res.status(400).json({
+                success: false,
+                error: 'jid parameter is required'
+            });
+            return;
+        }
+
+        Logger.info(`Fetching chat history for JID: ${jid}, limit: ${limit}, before: ${beforeMessageId || 'none'}, includeMedia: ${includeMedia}`);
+
+        const botService = BotService.getInstance();
+        const isGroup = jid.includes('@g.us');
+
+        // Validate bot is ready
+        if (!botService.getBot()) {
+            res.status(503).json({
+                success: false,
+                error: 'Bot not initialized or not connected to WhatsApp'
+            });
+            return;
+        }
+
+        // Fetch enhanced history from WhatsApp
+        try {
+            const historyMessages = await botService.fetchMessagesFromWA(jid, limit, beforeMessageId);
+
+            Logger.info(`Fetched ${historyMessages.length} historical messages from WhatsApp for ${jid}`);
+
+            // Process messages for frontend consumption
+            const processedMessages = historyMessages.map(msg => ({
+                id: msg.id,
+                from: msg.from,
+                fromMe: msg.fromMe,
+                body: msg.body,
+                type: msg.type,
+                timestamp: msg.timestamp,
+                pushName: msg.pushName,
+                // Media information (only if requested)
+                ...(includeMedia && {
+                    mediaUrl: msg.mediaUrl,
+                    fileName: msg.fileName,
+                    fileSize: msg.fileSize,
+                    duration: msg.duration
+                }),
+                // Location information
+                location: msg.location,
+                // Contact information
+                contactInfo: msg.contactInfo,
+                // Group message metadata
+                participant: msg.participant,
+                // Message status
+                status: msg.status,
+                ack: msg.ack,
+                // Enhanced metadata
+                isMedia: ['image', 'video', 'audio', 'document', 'sticker'].includes(msg.type),
+                hasCaption: !!msg.body && ['image', 'video', 'document'].includes(msg.type)
+            }));
+
+            res.json({
+                success: true,
+                data: processedMessages,
+                isGroup,
+                totalFound: processedMessages.length,
+                hasMore: processedMessages.length === limit,
+                source: 'whatsapp_history',
+                pagination: {
+                    limit,
+                    beforeMessageId,
+                    canLoadMore: processedMessages.length === limit
+                }
+            });
+
+        } catch (fetchError: any) {
+            Logger.error(`Failed to fetch chat history for ${jid}:`, fetchError);
+
+            res.status(500).json({
+                success: false,
+                error: `Failed to fetch chat history: ${fetchError.message}`
+            });
+        }
+
+    } catch (error: unknown) {
+        Logger.error('Error in getChatHistory:', error);
+        res.status(500).json({
+            success: false,
+            error: getErrorMessage(error)
+        });
+    }
+};
+
+/**
  * Mark messages as read for a chat
  */
 export const markAsRead = async (req: Request, res: Response): Promise<void> => {
@@ -1092,7 +1213,7 @@ export const markAsRead = async (req: Request, res: Response): Promise<void> => 
         // Normalize the JID for consistent handling
         const normalizedJid = normalizeRawJid(jid);
         const stableKey = toStableKey(jid);
-        console.log(`[markAsRead] raw = "${jid}" normalized = "${normalizedJid}" stableKey = "${stableKey}"`);
+        Logger.info(`[markAsRead] raw = "${jid}" normalized = "${normalizedJid}" stableKey = "${stableKey}"`);
 
         const botService = BotService.getInstance();
 
@@ -1108,7 +1229,7 @@ export const markAsRead = async (req: Request, res: Response): Promise<void> => 
         try {
             waSuccess = await botService.markMessagesAsRead(jid, messageIds);
         } catch (waError) {
-            console.warn(`[markAsRead] WhatsApp sync failed for ${jid}: `, waError);
+            Logger.warn(`[markAsRead] WhatsApp sync failed for ${jid}: `, waError);
             // Continue - local state is the source of truth
         }
 
@@ -1132,11 +1253,11 @@ export const markAsRead = async (req: Request, res: Response): Promise<void> => 
                 whatsappSynced: waSuccess
             }
         });
-    } catch (error: any) {
-        console.error('Error marking messages as read:', error);
+    } catch (error: unknown) {
+        Logger.error('Error marking messages as read:', error);
         res.status(500).json({
             success: false,
-            error: error.message || 'Failed to mark messages as read'
+            error: getErrorMessage(error) || 'Failed to mark messages as read'
         });
     }
 };
@@ -1162,11 +1283,13 @@ export const getReadState = async (req: Request, res: Response): Promise<void> =
             success: true,
             data: readState
         });
-    } catch (error: any) {
-        console.error('Error getting read state:', error);
+    } catch (error: unknown) {
+        Logger.error('Error getting read state:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
+
+

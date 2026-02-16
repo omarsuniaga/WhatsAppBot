@@ -1,10 +1,14 @@
 /**
  * AttendanceAlertsPage
  * Configuration and monitoring for attendance alert automation
+ * Mobile-first responsive design with modern layout patterns
  */
 
 import { useState, useEffect } from 'react';
 import { Bell, Settings, History, Activity, Play, TrendingUp } from 'lucide-react';
+import { API_URL } from '../api/client';
+import { InfoButton } from '../components/common/InfoButton';
+import { usePageInfo } from '../hooks/useViewInfo';
 
 interface AlertConfig {
     enabled: boolean;
@@ -33,6 +37,8 @@ interface AlertHistory {
 }
 
 export const AttendanceAlertsPage = () => {
+    const pageInfo = usePageInfo('attendanceAlerts');
+
     const [config, setConfig] = useState<AlertConfig>({
         enabled: true,
         absenceThreshold: 3,
@@ -51,7 +57,8 @@ export const AttendanceAlertsPage = () => {
     const [loading, setLoading] = useState(true);
     const [saving, setSaving] = useState(false);
 
-    const API_BASE = 'http://localhost:3002/api';
+
+    const API_BASE = `${API_URL}/api`;
 
     // Load initial data
     useEffect(() => {
@@ -142,195 +149,250 @@ export const AttendanceAlertsPage = () => {
     }
 
     return (
-        <div className="p-6 max-w-6xl mx-auto">
-            {/* Header */}
-            <div className="mb-6">
-                <h1 className="text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
-                    <Bell className="text-orange-500" />
-                    Alertas de Asistencia
-                </h1>
-                <p className="text-gray-600 dark:text-gray-400 mt-2">
-                    Sistema automático de notificaciones por ausencias
-                </p>
-            </div>
-
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-                <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center justify-between">
+        <div className="min-h-screen max-h-screen overflow-y-auto bg-gray-50 dark:bg-gray-900 transition-colors duration-200">
+            {/* Main Container - Mobile-first responsive padding */}
+            <div className="w-full px-4 py-4 sm:px-6 sm:py-6 md:px-8 md:py-8">
+                <div className="max-w-6xl mx-auto">
+                    {/* Header with Info Button - Responsive layout */}
+                    <div className="mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                         <div>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">Total Alertas</p>
-                            <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalAlerts}</p>
+                            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                                <Bell className="text-orange-500 w-6 h-6 sm:w-8 sm:h-8" />
+                                Alertas de Asistencia
+                            </h1>
+                            <p className="text-sm sm:text-base text-gray-600 dark:text-gray-400 mt-2">
+                                Sistema automático de notificaciones por ausencias
+                            </p>
                         </div>
-                        <Activity className="text-orange-500" size={32} />
+                        {pageInfo && <InfoButton {...pageInfo} />}
+                    </div>
+
+                    {/* Stats Cards - Responsive grid: 1 col mobile, 3 cols on md+ */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4 mb-6">
+                        {/* Total Alerts Card */}
+                        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 hover:shadow-md dark:hover:shadow-lg transition-shadow duration-200">
+                            <div className="flex items-center justify-between">
+                                <div className="min-w-0">
+                                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-medium">Total Alertas</p>
+                                    <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                                        {stats.totalAlerts}
+                                    </p>
+                                </div>
+                                <Activity className="text-orange-500 w-8 h-8 sm:w-10 sm:h-10 flex-shrink-0 ml-2" />
+                            </div>
+                        </div>
+
+                        {/* Last 24h Card */}
+                        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 hover:shadow-md dark:hover:shadow-lg transition-shadow duration-200">
+                            <div className="flex items-center justify-between">
+                                <div className="min-w-0">
+                                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-medium">Últimas 24h</p>
+                                    <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                                        {stats.last24h}
+                                    </p>
+                                </div>
+                                <TrendingUp className="text-blue-500 w-8 h-8 sm:w-10 sm:h-10 flex-shrink-0 ml-2" />
+                            </div>
+                        </div>
+
+                        {/* Last 7 Days Card */}
+                        <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 hover:shadow-md dark:hover:shadow-lg transition-shadow duration-200 sm:col-span-2 lg:col-span-1">
+                            <div className="flex items-center justify-between">
+                                <div className="min-w-0">
+                                    <p className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 font-medium">Últimos 7 días</p>
+                                    <p className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white mt-1">
+                                        {stats.last7days}
+                                    </p>
+                                </div>
+                                <History className="text-green-500 w-8 h-8 sm:w-10 sm:h-10 flex-shrink-0 ml-2" />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Configuration Panel - Responsive with mobile scrolling */}
+                    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 mb-6 overflow-hidden">
+                        {/* Panel Header */}
+                        <div className="bg-gradient-to-r from-orange-50 to-orange-100 dark:from-orange-900/20 dark:to-orange-900/10 px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center gap-2">
+                            <Settings className="text-orange-500 w-5 h-5 sm:w-6 sm:h-6" />
+                            <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">
+                                Configuración
+                            </h2>
+                        </div>
+
+                        {/* Panel Content */}
+                        <div className="p-4 sm:p-6 space-y-5 sm:space-y-6">
+                            {/* Enabled Toggle */}
+                            <div className="flex items-center justify-between pb-4 sm:pb-5 border-b border-gray-100 dark:border-gray-700">
+                                <label className="flex items-center gap-3 cursor-pointer flex-1 min-w-0">
+                                    <input
+                                        type="checkbox"
+                                        checked={config.enabled}
+                                        onChange={(e) => setConfig({ ...config, enabled: e.target.checked })}
+                                        className="w-4 h-4 text-orange-500 border-gray-300 rounded focus:ring-2 focus:ring-orange-500 focus:ring-offset-0 dark:focus:ring-offset-gray-800 cursor-pointer"
+                                    />
+                                    <span className="text-sm sm:text-base text-gray-900 dark:text-white font-medium">
+                                        Alertas Automáticas Habilitadas
+                                    </span>
+                                </label>
+                                <span className={`ml-2 px-2 sm:px-3 py-1 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap flex-shrink-0 ${config.enabled ? 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-400' : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'}`}>
+                                    {config.enabled ? '✓ Activo' : 'Inactivo'}
+                                </span>
+                            </div>
+
+                            {/* Auto Send Toggle */}
+                            <div className="flex items-center gap-3 pb-4 sm:pb-5 border-b border-gray-100 dark:border-gray-700">
+                                <input
+                                    type="checkbox"
+                                    id="autoSend"
+                                    checked={config.autoSend}
+                                    onChange={(e) => setConfig({ ...config, autoSend: e.target.checked })}
+                                    className="w-4 h-4 text-orange-500 border-gray-300 rounded focus:ring-2 focus:ring-orange-500 focus:ring-offset-0 dark:focus:ring-offset-gray-800 cursor-pointer"
+                                />
+                                <label htmlFor="autoSend" className="text-sm sm:text-base text-gray-900 dark:text-white cursor-pointer">
+                                    Envío Automático <span className="text-gray-500 dark:text-gray-400">(sin aprobación manual)</span>
+                                </label>
+                            </div>
+
+                            {/* Absence Threshold Slider */}
+                            <div className="pb-4 sm:pb-5 border-b border-gray-100 dark:border-gray-700">
+                                <label className="block mb-3 text-sm sm:text-base font-medium text-gray-900 dark:text-white">
+                                    Umbral de Ausencias
+                                </label>
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                                    <input
+                                        type="range"
+                                        min="2"
+                                        max="10"
+                                        value={config.absenceThreshold}
+                                        onChange={(e) => setConfig({ ...config, absenceThreshold: +e.target.value })}
+                                        className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-orange-500"
+                                        aria-label="Umbral de ausencias"
+                                    />
+                                    <div className="flex items-center gap-2 sm:gap-3">
+                                        <span className="text-2xl sm:text-3xl font-bold text-orange-500 tabular-nums w-12 text-right">
+                                            {config.absenceThreshold}
+                                        </span>
+                                        <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                                            ausencias
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Days to Analyze Slider */}
+                            <div>
+                                <label className="block mb-3 text-sm sm:text-base font-medium text-gray-900 dark:text-white">
+                                    Período de Análisis
+                                </label>
+                                <div className="flex flex-col sm:flex-row sm:items-center gap-3 sm:gap-4">
+                                    <input
+                                        type="range"
+                                        min="3"
+                                        max="30"
+                                        value={config.daysToAnalyze}
+                                        onChange={(e) => setConfig({ ...config, daysToAnalyze: +e.target.value })}
+                                        className="flex-1 h-2 bg-gray-200 dark:bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                                        aria-label="Período de análisis en días"
+                                    />
+                                    <div className="flex items-center gap-2 sm:gap-3">
+                                        <span className="text-2xl sm:text-3xl font-bold text-blue-500 tabular-nums w-12 text-right">
+                                            {config.daysToAnalyze}
+                                        </span>
+                                        <span className="text-xs sm:text-sm text-gray-600 dark:text-gray-400 whitespace-nowrap">
+                                            días
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Action Buttons - Responsive stack */}
+                            <div className="pt-4 sm:pt-6 flex flex-col sm:flex-row gap-2 sm:gap-3">
+                                <button
+                                    onClick={saveConfig}
+                                    disabled={saving}
+                                    className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-2 bg-orange-500 text-white font-medium rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed transition-colors duration-200 text-sm sm:text-base"
+                                >
+                                    {saving ? 'Guardando...' : 'Guardar Configuración'}
+                                </button>
+
+                                <button
+                                    onClick={triggerManualAnalysis}
+                                    className="w-full sm:w-auto px-4 sm:px-6 py-2.5 sm:py-2 bg-blue-500 text-white font-medium rounded-lg hover:bg-blue-600 transition-colors duration-200 flex items-center justify-center gap-2 text-sm sm:text-base"
+                                >
+                                    <Play className="w-4 h-4" />
+                                    Ejecutar Análisis Manual
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* History Panel - Responsive with horizontal scroll on mobile */}
+                    <div className="bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 overflow-hidden">
+                        {/* Panel Header */}
+                        <div className="bg-gradient-to-r from-green-50 to-green-100 dark:from-green-900/20 dark:to-green-900/10 px-4 sm:px-6 py-4 border-b border-gray-200 dark:border-gray-700 flex items-center gap-2">
+                            <History className="text-green-600 w-5 h-5 sm:w-6 sm:h-6" />
+                            <h2 className="text-lg sm:text-xl font-semibold text-gray-900 dark:text-white">
+                                Historial de Alertas <span className="text-gray-500 dark:text-gray-400 font-normal">({history.length})</span>
+                            </h2>
+                        </div>
+
+                        {/* Panel Content */}
+                        {history.length === 0 ? (
+                            <div className="p-6 sm:p-8 text-center">
+                                <p className="text-gray-500 dark:text-gray-400 text-sm sm:text-base">
+                                    No hay alertas registradas
+                                </p>
+                            </div>
+                        ) : (
+                            <div className="overflow-x-auto max-h-96 overflow-y-auto">
+                                <table className="w-full">
+                                    <thead className="bg-gray-50 dark:bg-gray-700/50 border-b border-gray-200 dark:border-gray-700">
+                                        <tr>
+                                            <th className="text-left px-4 sm:px-6 py-3 text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                                                Fecha
+                                            </th>
+                                            <th className="text-left px-4 sm:px-6 py-3 text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300">
+                                                Mensaje
+                                            </th>
+                                            <th className="text-left px-4 sm:px-6 py-3 text-xs sm:text-sm font-semibold text-gray-700 dark:text-gray-300 whitespace-nowrap">
+                                                Nivel
+                                            </th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+                                        {history.map((alert) => (
+                                            <tr key={alert.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/30 transition-colors duration-150">
+                                                <td className="px-4 sm:px-6 py-3 text-xs sm:text-sm text-gray-900 dark:text-white whitespace-nowrap">
+                                                    {new Date(alert.createdAt * 1000).toLocaleString('es-DO', {
+                                                        month: 'short',
+                                                        day: '2-digit',
+                                                        hour: '2-digit',
+                                                        minute: '2-digit'
+                                                    })}
+                                                </td>
+                                                <td className="px-4 sm:px-6 py-3 text-xs sm:text-sm text-gray-900 dark:text-white">
+                                                    <span className="line-clamp-2 sm:line-clamp-none">
+                                                        {alert.message}
+                                                    </span>
+                                                </td>
+                                                <td className="px-4 sm:px-6 py-3 text-xs sm:text-sm font-medium whitespace-nowrap">
+                                                    <span className={`inline-flex px-2 sm:px-3 py-1 rounded-full text-xs font-semibold ${alert.level === 'Error'
+                                                        ? 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-400'
+                                                        : alert.level === 'Warning'
+                                                            ? 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-400'
+                                                            : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-400'
+                                                        }`}>
+                                                        {alert.level}
+                                                    </span>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        )}
                     </div>
                 </div>
-
-                <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">Últimas 24h</p>
-                            <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.last24h}</p>
-                        </div>
-                        <TrendingUp className="text-blue-500" size={32} />
-                    </div>
-                </div>
-
-                <div className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <p className="text-sm text-gray-600 dark:text-gray-400">Últimos 7 días</p>
-                            <p className="text-2xl font-bold text-gray-900 dark:text-white">{stats.last7days}</p>
-                        </div>
-                        <History className="text-green-500" size={32} />
-                    </div>
-                </div>
-            </div>
-
-            {/* Configuration Panel */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 mb-6 border border-gray-200 dark:border-gray-700">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                    <Settings className="text-orange-500" />
-                    Configuración
-                </h2>
-
-                <div className="space-y-4">
-                    {/* Enabled Toggle */}
-                    <div className="flex items-center justify-between">
-                        <label className="flex items-center gap-2 cursor-pointer">
-                            <input
-                                type="checkbox"
-                                checked={config.enabled}
-                                onChange={(e) => setConfig({ ...config, enabled: e.target.checked })}
-                                className="w-4 h-4 text-orange-500 border-gray-300 rounded focus:ring-orange-500"
-                            />
-                            <span className="text-gray-900 dark:text-white font-medium">
-                                Alertas Automáticas Habilitadas
-                            </span>
-                        </label>
-                        <span className={`px-3 py-1 rounded-full text-sm ${config.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>
-                            {config.enabled ? 'Activo' : 'Inactivo'}
-                        </span>
-                    </div>
-
-                    {/* Auto Send Toggle */}
-                    <div className="flex items-center gap-2">
-                        <input
-                            type="checkbox"
-                            checked={config.autoSend}
-                            onChange={(e) => setConfig({ ...config, autoSend: e.target.checked })}
-                            className="w-4 h-4 text-orange-500 border-gray-300 rounded focus:ring-orange-500"
-                        />
-                        <span className="text-gray-900 dark:text-white">
-                            Envío Automático (sin aprobación manual)
-                        </span>
-                    </div>
-
-                    {/* Threshold */}
-                    <div>
-                        <label className="block mb-2 text-gray-900 dark:text-white">
-                            Umbral de Ausencias
-                        </label>
-                        <div className="flex items-center gap-4">
-                            <input
-                                type="range"
-                                min="2"
-                                max="10"
-                                value={config.absenceThreshold}
-                                onChange={(e) => setConfig({ ...config, absenceThreshold: +e.target.value })}
-                                className="flex-1"
-                            />
-                            <span className="text-2xl font-bold text-orange-500 w-12 text-center">
-                                {config.absenceThreshold}
-                            </span>
-                            <span className="text-gray-600 dark:text-gray-400">ausencias</span>
-                        </div>
-                    </div>
-
-                    {/* Days to Analyze */}
-                    <div>
-                        <label className="block mb-2 text-gray-900 dark:text-white">
-                            Período de Análisis
-                        </label>
-                        <div className="flex items-center gap-4">
-                            <input
-                                type="range"
-                                min="3"
-                                max="30"
-                                value={config.daysToAnalyze}
-                                onChange={(e) => setConfig({ ...config, daysToAnalyze: +e.target.value })}
-                                className="flex-1"
-                            />
-                            <span className="text-2xl font-bold text-blue-500 w-12 text-center">
-                                {config.daysToAnalyze}
-                            </span>
-                            <span className="text-gray-600 dark:text-gray-400">días</span>
-                        </div>
-                    </div>
-
-                    {/* Action Buttons */}
-                    <div className="flex gap-2 pt-4">
-                        <button
-                            onClick={saveConfig}
-                            disabled={saving}
-                            className="bg-orange-500 text-white px-6 py-2 rounded-lg hover:bg-orange-600 disabled:opacity-50 disabled:cursor-not-allowed"
-                        >
-                            {saving ? 'Guardando...' : 'Guardar Configuración'}
-                        </button>
-
-                        <button
-                            onClick={triggerManualAnalysis}
-                            className="bg-blue-500 text-white px-6 py-2 rounded-lg hover:bg-blue-600 flex items-center gap-2"
-                        >
-                            <Play size={16} />
-                            Ejecutar Análisis Manual
-                        </button>
-                    </div>
-                </div>
-            </div>
-
-            {/* History Panel */}
-            <div className="bg-white dark:bg-gray-800 rounded-lg p-6 border border-gray-200 dark:border-gray-700">
-                <h2 className="text-xl font-semibold text-gray-900 dark:text-white mb-4 flex items-center gap-2">
-                    <History className="text-orange-500" />
-                    Historial de Alertas ({history.length})
-                </h2>
-
-                {history.length === 0 ? (
-                    <p className="text-gray-500 text-center py-8">No hay alertas registradas</p>
-                ) : (
-                    <div className="overflow-x-auto">
-                        <table className="w-full">
-                            <thead className="border-b border-gray-200 dark:border-gray-700">
-                                <tr>
-                                    <th className="text-left p-3 text-gray-600 dark:text-gray-400 font-medium">Fecha</th>
-                                    <th className="text-left p-3 text-gray-600 dark:text-gray-400 font-medium">Mensaje</th>
-                                    <th className="text-left p-3 text-gray-600 dark:text-gray-400 font-medium">Nivel</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {history.map((alert) => (
-                                    <tr key={alert.id} className="border-b border-gray-100 dark:border-gray-700 hover:bg-gray-50 dark:hover:bg-gray-700/50">
-                                        <td className="p-3 text-gray-900 dark:text-white">
-                                            {new Date(alert.createdAt * 1000).toLocaleString('es-DO')}
-                                        </td>
-                                        <td className="p-3 text-gray-900 dark:text-white">
-                                            {alert.message}
-                                        </td>
-                                        <td className="p-3">
-                                            <span className={`px-2 py-1 rounded text-sm ${alert.level === 'Error' ? 'bg-red-100 text-red-800' :
-                                                    alert.level === 'Warning' ? 'bg-yellow-100 text-yellow-800' :
-                                                        'bg-blue-100 text-blue-800'
-                                                }`}>
-                                                {alert.level}
-                                            </span>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
-                )}
             </div>
         </div>
     );

@@ -14,9 +14,11 @@ import * as alertController from '../controllers/alertController';
 import * as botAssignmentController from '../controllers/botAssignmentController';
 import * as learningController from '../controllers/learningController';
 import * as triggerController from '../controllers/triggerController';
+import * as dailyReminderController from '../controllers/dailyReminderController';
 import { checkRateLimit, conditionalRateLimit } from '../middlewares/rateLimitMiddleware';
 import RateLimitService from '../services/rateLimitService';
 import MessageQueueService from '../services/messageQueueService';
+import Logger from '../services/loggerService';
 import institutionalRoutes from './institutional';
 import { adminRoutes } from '../../../backend/src/routes';
 
@@ -29,17 +31,71 @@ import { upload } from '../middlewares/uploadMiddleware';
 // ==========================================
 router.get('/status', statusController.getStatus);
 router.get('/status/qr', statusController.getQR);
+router.get('/status/health', statusController.getHealth);
+router.get('/status/rate-limiter', statusController.getRateLimiterStats);
 router.post('/auth/logout', statusController.logout);
+router.get('/status/broadcast-worker', (req, res) => {
+    const firestoreBroadcast = require('../services/firestoreBroadcastService').default.getInstance();
+    res.json(firestoreBroadcast.getStatus());
+});
+
+// ==========================================
+// Session control routes
+// ==========================================
+router.post('/session/disconnect', statusController.disconnect);
+router.post('/session/reconnect', statusController.reconnect);
+
+// ==========================================
+// Daily Reminders routes (Move to top to avoid shadowing)
+// ==========================================
+Logger.debug('[Router] Registering daily-reminders routes');
+router.get('/daily-reminders/status', dailyReminderController.getDailyReminderStatus);
+router.get('/daily-reminders/config', dailyReminderController.getDailyReminderConfig);
+router.post('/daily-reminders/config', dailyReminderController.updateDailyReminderConfig);
+router.get('/daily-reminders/search-contacts', dailyReminderController.searchDailyReminderContacts);
+router.post('/daily-reminders/test', dailyReminderController.testDailyReminder);
+router.post('/daily-reminders/generate-draft', dailyReminderController.generateDailyReminderDraft);
+router.post('/daily-reminders/execute', dailyReminderController.executeDailyReminder);
+router.get('/daily-reminders/whatsapp-status', dailyReminderController.getWhatsAppStatus);
+router.get('/daily-reminders/whatsapp-groups', dailyReminderController.getWhatsAppGroups);
+
+// ==========================================
+// Simple Test Routes (for debugging)
+// ==========================================
+import * as simpleTestController from '../controllers/simpleTestController';
+if (process.env.NODE_ENV !== 'production') {
+    router.get('/daily-reminders/test-ping', (req, res) => {
+        Logger.debug('[Router] Hit daily-reminders/test-ping');
+        res.json({ pong: true, time: new Date().toISOString() });
+    });
+    router.get('/test/simple-message', simpleTestController.testSimpleReminder);
+    router.get('/test/simple-config', simpleTestController.testConfigSimple);
+}
+
+// Templates CRUD
+router.get('/daily-reminders/templates', dailyReminderController.getTemplates);
+router.post('/daily-reminders/templates', dailyReminderController.saveTemplate);
+router.delete('/daily-reminders/templates/:id', dailyReminderController.deleteTemplate);
+
+// Schedule message
+router.post('/daily-reminders/schedule', dailyReminderController.scheduleMessage);
+router.get('/daily-reminders/attendance-message-templates', dailyReminderController.getAttendanceMessageTemplates);
+router.put('/daily-reminders/attendance-message-templates/:action', dailyReminderController.updateAttendanceMessageTemplate);
+router.post('/daily-reminders/attendance-message-templates/:action/reset', dailyReminderController.resetAttendanceMessageTemplate);
+router.get('/daily-reminders/attendance-message-templates/history', dailyReminderController.getAttendanceMessageTemplateHistory);
 
 // ==========================================
 // Chat routes
 // ==========================================
 router.get('/chats', chatController.getChats);
-router.get('/chats/diagnostics/visual', chatController.diagnoseChatLoadVisual);
-router.get('/chats/diagnostics/chat-load', chatController.diagnoseChatLoad);
 router.get('/chats/:jid/messages', chatController.getChatMessages);
+router.get('/chats/:jid/history', chatController.getChatHistory);
 router.post('/chats/:jid/bot-toggle', chatController.toggleBot);
 router.post('/chats/:jid/mark-read', chatController.markAsRead);
+if (process.env.NODE_ENV !== 'production') {
+    router.get('/chats/diagnostics/visual', chatController.diagnoseChatLoadVisual);
+    router.get('/chats/diagnostics/chat-load', chatController.diagnoseChatLoad);
+}
 
 // ==========================================
 // Contact routes
@@ -53,6 +109,9 @@ router.get('/contacts/:jid', contactController.getContactInfo);
 // ==========================================
 router.get('/config/ai', aiController.getAIConfig);
 router.post('/config/ai', aiController.updateAIConfig);
+router.post('/config/ai/test', aiController.testAIConnection);
+router.post('/ai/generate-template', aiController.generateTemplate);
+router.post('/ai/generate-variation', aiController.generateVariation);
 
 // ==========================================
 // Message routes (with rate limiting)
@@ -209,6 +268,7 @@ router.post('/bot/toggle/:jid', botController.toggleBot);
 router.post('/bot/test', botController.testResponse);
 router.get('/bot/stats', botController.getStats);
 router.post('/bot/stats/reset', botController.resetStats);
+router.get('/bot/resolution-stats', botController.getResolutionStats);
 
 // Knowledge base
 router.get('/bot/knowledge', botController.getKnowledgeBase);
@@ -297,10 +357,16 @@ router.get('/broadcast/campaigns/:id/progress', broadcastController.getCampaignP
 router.get('/broadcast/stats', broadcastController.getStats);
 
 // ==========================================
+// Daily Reminders routes moved to top
+// ==========================================
+
+// ==========================================
 // Pending Alerts routes (Smart Bot Escalations)
 // ==========================================
 router.get('/alerts', alertController.getAlerts);
 router.get('/alerts/stats', alertController.getAlertStats);
+router.get('/alerts/frequent-unanswered', alertController.getFrequentUnanswered);
+router.get('/alerts/export', alertController.exportAlerts);
 router.get('/alerts/:id', alertController.getAlert);
 router.get('/alerts/chat/:jid', alertController.getAlertsByChat);
 router.post('/alerts/:id/respond', alertController.respondToAlert);
@@ -326,6 +392,7 @@ router.get('/learning', learningController.getAll);
 router.get('/learning/pending', learningController.getPending);
 router.get('/learning/settings', learningController.getSettings);
 router.get('/learning/stats', learningController.getStats);
+router.get('/learning/auto-stats', learningController.getAutoStats);
 router.get('/learning/:id', learningController.getById);
 router.put('/learning/settings', learningController.updateSettings);
 router.post('/learning/:id/approve', learningController.approve);
@@ -344,6 +411,7 @@ router.get('/triggers/stats', triggerController.getStats);
 router.get('/triggers/export', triggerController.exportTriggers);
 router.post('/triggers/import', triggerController.importTriggers);
 router.post('/triggers/test', triggerController.testMessage);
+router.get('/triggers/logs', triggerController.streamLogs);
 router.post('/triggers/enable-all', triggerController.enableAllTriggers);
 router.post('/triggers/disable-all', triggerController.disableAllTriggers);
 router.post('/triggers/stats/reset', triggerController.resetStats);

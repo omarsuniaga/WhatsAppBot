@@ -8,10 +8,13 @@ import {
     GraduationCap, Plus, Search, Edit2, Trash2,
     RefreshCw, X, Save, Phone, User, Calendar, MapPin, Mail,
     Music, School, FileText, AlertCircle, Users, Heart,
-    ChevronUp, ChevronDown, PhoneOff, Cake, Check
+    ChevronUp, ChevronDown, PhoneOff, Cake, Check, Undo2
 } from 'lucide-react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { Alumno, AlumnoFormData, emptyAlumnoForm, alumnoToFormData, formDataToAlumno } from '../types/alumno';
 import { alumnosService } from '../services/firestore';
+import { InfoButton } from '../components/common/InfoButton';
+import { usePageInfo } from '../hooks/useViewInfo';
 
 // Note: Instrumentos are now dynamic from student data
 
@@ -35,7 +38,16 @@ const getInstrumentName = (instrumento: any): string => {
 type SortColumn = 'nombre' | 'edad' | 'instrumento' | 'contacto' | 'grupos' | 'estado' | null;
 type SortDirection = 'asc' | 'desc';
 
+// Inline editing types
+type EditableField = 'nombre' | 'apellido' | 'instrumento' | 'tlf_madre' | 'tlf_padre' | 'tlf' | 'madre' | 'padre' | 'activo' | 'nac' | 'edad' | 'grupo';
+type EditingCell = { studentId: string; field: EditableField } | null;
+// Pending changes: Map<studentId, { field: newValue }>
+type PendingChanges = Record<string, Partial<Alumno>>;
+
 export const StudentsPage = () => {
+    const pageInfo = usePageInfo('students');
+    const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [students, setStudents] = useState<Alumno[]>([]);
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
@@ -64,9 +76,74 @@ export const StudentsPage = () => {
     const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
 
     // Inline editing state
-    const [editingCell, setEditingCell] = useState<{ studentId: string; field: string; originalValue: any } | null>(null);
-    const [tempEditValue, setTempEditValue] = useState<any>(null);
-    const [savingCell, setSavingCell] = useState(false);
+    const [editingCell, setEditingCell] = useState<EditingCell>(null);
+    const [pendingChanges, setPendingChanges] = useState<PendingChanges>({});
+    const [savingInline, setSavingInline] = useState(false);
+    const fromDiagnostics = searchParams.get('source') === 'attendance-diagnostics';
+    const diagnosticReason = searchParams.get('reason') || '';
+    const diagnosticId = searchParams.get('diagId') || '';
+
+    const hasPendingChanges = Object.keys(pendingChanges).length > 0;
+    const pendingCount = Object.keys(pendingChanges).length;
+
+    // Get the display value for a field (pending change overrides original)
+    const getDisplayValue = (student: Alumno, field: EditableField): string => {
+        const changes = pendingChanges[student.id];
+        if (changes && field in changes) {
+            const val = changes[field];
+            if (field === 'activo') return val ? 'true' : 'false';
+            return String(val ?? '');
+        }
+        const val = student[field];
+        if (val === undefined || val === null) return '';
+        if (field === 'instrumento') return getInstrumentName(val);
+        return String(val);
+    };
+
+    // Set a pending change for a field
+    const setCellValue = (studentId: string, field: EditableField, value: any) => {
+        setPendingChanges(prev => {
+            const existing = prev[studentId] || {};
+            return { ...prev, [studentId]: { ...existing, [field]: value } };
+        });
+    };
+
+    // Start editing a cell
+    const startEditing = (studentId: string, field: EditableField) => {
+        setEditingCell({ studentId, field });
+    };
+
+    // Stop editing current cell
+    const stopEditing = () => {
+        setEditingCell(null);
+    };
+
+    // Discard all pending changes
+    const discardChanges = () => {
+        setPendingChanges({});
+        setEditingCell(null);
+    };
+
+    // Save all pending changes to Firestore
+    const saveAllChanges = async () => {
+        if (!hasPendingChanges) return;
+        setSavingInline(true);
+        setError(null);
+        try {
+            const promises = Object.entries(pendingChanges).map(([studentId, changes]) =>
+                alumnosService.update(studentId, changes)
+            );
+            await Promise.all(promises);
+            setPendingChanges({});
+            setEditingCell(null);
+            await loadStudents();
+        } catch (err: any) {
+            console.error('Error saving inline changes:', err);
+            setError(err.message || 'Error al guardar los cambios');
+        } finally {
+            setSavingInline(false);
+        }
+    };
 
     // Load students from Firestore
     const loadStudents = useCallback(async () => {
@@ -87,6 +164,29 @@ export const StudentsPage = () => {
     useEffect(() => {
         loadStudents();
     }, [loadStudents]);
+
+    useEffect(() => {
+        const urlSearch = searchParams.get('search');
+        if (urlSearch && urlSearch !== searchTerm) {
+            setSearchTerm(urlSearch);
+        }
+
+        const editStudentId = searchParams.get('edit');
+        if (editStudentId && students.length > 0 && !showModal) {
+            const student = students.find(s => s.id === editStudentId);
+            if (student) {
+                setEditingStudent(alumnoToFormData(student));
+                setEditingId(student.id);
+                setError(null);
+                setShowModal(true);
+            }
+            setSearchParams(prev => {
+                const next = new URLSearchParams(prev);
+                next.delete('edit');
+                return next;
+            });
+        }
+    }, [searchParams, setSearchParams, students, showModal, searchTerm]);
 
     // Compute unique instruments from actual student data (dynamic filter)
     const uniqueInstruments = useMemo(() => {
@@ -147,71 +247,6 @@ export const StudentsPage = () => {
             setError(err.message || 'Error al eliminar el alumno');
         } finally {
             setDeleting(false);
-        }
-    };
-
-    // Inline editing handlers
-    const handleCellDoubleClick = (student: Alumno, field: string) => {
-        // Allow editing for most fields
-        const editableFields = ['nombre', 'apellido', 'instrumento', 'tlf', 'tlf_madre', 'tlf_padre', 'email', 'edad'];
-        if (!editableFields.includes(field)) return;
-
-        const currentValue = student[field as keyof Alumno];
-        setEditingCell({ studentId: student.id, field, originalValue: currentValue });
-        setTempEditValue(currentValue || '');
-    };
-
-    const handleCellValueChange = (value: any) => {
-        setTempEditValue(value);
-    };
-
-    const handleAcceptEdit = async () => {
-        if (!editingCell) return;
-
-        setSavingCell(true);
-        setError(null);
-
-        try {
-            // Save immediately to Firebase
-            await alumnosService.update(editingCell.studentId, {
-                [editingCell.field]: tempEditValue
-            });
-
-            await loadStudents();
-            setEditingCell(null);
-            setTempEditValue(null);
-        } catch (err: any) {
-            console.error('Error saving cell:', err);
-            setError(err.message || 'Error al guardar el cambio');
-        } finally {
-            setSavingCell(false);
-        }
-    };
-
-    const handleCancelEdit = () => {
-        setEditingCell(null);
-        setTempEditValue(null);
-    };
-
-    const handleCellKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter') {
-            handleAcceptEdit();
-        } else if (e.key === 'Escape') {
-            handleCancelEdit();
-        }
-    };
-
-    const toggleActivoDoubleClick = async (studentId: string, currentValue: boolean) => {
-        setError(null);
-        try {
-            // Toggle and save immediately
-            await alumnosService.update(studentId, {
-                activo: !currentValue
-            });
-            await loadStudents();
-        } catch (err: any) {
-            console.error('Error toggling activo:', err);
-            setError(err.message || 'Error al cambiar el estado');
         }
     };
 
@@ -555,8 +590,6 @@ export const StudentsPage = () => {
         </th>
     );
 
-
-
     return (
         <div className="h-full overflow-y-auto p-4 sm:p-6">
             <div className="max-w-7xl mx-auto">
@@ -589,8 +622,36 @@ export const StudentsPage = () => {
                             <Plus className="w-4 h-4" />
                             Nuevo Alumno
                         </button>
+                        {pageInfo.hasInfo && (
+                            <InfoButton
+                                title={pageInfo.title}
+                                description={pageInfo.description}
+                                tips={pageInfo.tips}
+                            />
+                        )}
                     </div>
                 </div>
+
+                {fromDiagnostics && (
+                    <div className="mb-4 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-800 dark:text-indigo-300 text-sm">
+                        Contexto: abierto desde diagnostico de asistencias. Revisa y corrige este registro para habilitar notificaciones por WhatsApp.
+                        {diagnosticReason && <span className="block mt-1 font-medium">Motivo: {diagnosticReason}</span>}
+                        <button
+                            onClick={() => {
+                                const params = new URLSearchParams({
+                                    source: 'fix-return',
+                                    focus: 'contact-diagnostics'
+                                });
+                                if (diagnosticReason) params.set('reason', diagnosticReason);
+                                if (diagnosticId) params.set('diagId', diagnosticId);
+                                navigate(`/attendance?${params.toString()}`);
+                            }}
+                            className="mt-2 inline-flex items-center px-3 py-1.5 rounded bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition-colors"
+                        >
+                            Volver a Diagnostico
+                        </button>
+                    </div>
+                )}
 
                 {/* Error Alert */}
                 {error && (
@@ -605,8 +666,8 @@ export const StudentsPage = () => {
 
                 {/* Filters */}
                 <div className="bg-white dark:bg-gray-800 rounded-lg border dark:border-gray-700 p-4 mb-6">
-                    <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
-                        <div className="sm:col-span-2 relative">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+                        <div className="sm:col-span-2 lg:col-span-2 relative">
                             <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
                             <input
                                 type="text"
@@ -690,95 +751,60 @@ export const StudentsPage = () => {
                                                             <User className="w-5 h-5 text-blue-500" />
                                                         </div>
                                                     )}
-                                                    <div>
-                                                        <div className="font-medium text-gray-800 dark:text-gray-200 flex items-center gap-1.5">
-                                                            {/* Nombre - Editable */}
-                                                            {editingCell?.studentId === student.id && editingCell?.field === 'nombre' ? (
-                                                                <div className="flex items-center gap-1">
-                                                                    <input
-                                                                        type="text"
-                                                                        autoFocus
-                                                                        value={tempEditValue || ''}
-                                                                        onChange={(e) => handleCellValueChange(e.target.value)}
-                                                                        onKeyDown={handleCellKeyDown}
-                                                                        disabled={savingCell}
-                                                                        className="px-2 py-1 border-2 border-blue-500 rounded bg-white dark:bg-gray-700 text-sm font-medium w-24"
-                                                                    />
-                                                                    <button
-                                                                        onClick={handleAcceptEdit}
-                                                                        disabled={savingCell}
-                                                                        className="p-1 bg-green-500 hover:bg-green-600 text-white rounded disabled:opacity-50"
-                                                                        title="Aceptar (Enter)"
-                                                                    >
-                                                                        <Check className="w-3 h-3" />
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={handleCancelEdit}
-                                                                        disabled={savingCell}
-                                                                        className="p-1 bg-red-500 hover:bg-red-600 text-white rounded disabled:opacity-50"
-                                                                        title="Cancelar (Esc)"
-                                                                    >
-                                                                        <X className="w-3 h-3" />
-                                                                    </button>
-                                                                </div>
-                                                            ) : (
-                                                                <span
-                                                                    onDoubleClick={() => handleCellDoubleClick(student, 'nombre')}
-                                                                    className="cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30 px-1 rounded transition"
-                                                                    title="Doble click para editar"
-                                                                >
-                                                                    {student.nombre}
-                                                                </span>
-                                                            )}
-                                                            {' '}
-                                                            {/* Apellido - Editable */}
-                                                            {editingCell?.studentId === student.id && editingCell?.field === 'apellido' ? (
-                                                                <div className="flex items-center gap-1">
-                                                                    <input
-                                                                        type="text"
-                                                                        autoFocus
-                                                                        value={tempEditValue || ''}
-                                                                        onChange={(e) => handleCellValueChange(e.target.value)}
-                                                                        onKeyDown={handleCellKeyDown}
-                                                                        disabled={savingCell}
-                                                                        className="px-2 py-1 border-2 border-blue-500 rounded bg-white dark:bg-gray-700 text-sm font-medium w-24"
-                                                                    />
-                                                                    <button
-                                                                        onClick={handleAcceptEdit}
-                                                                        disabled={savingCell}
-                                                                        className="p-1 bg-green-500 hover:bg-green-600 text-white rounded disabled:opacity-50"
-                                                                        title="Aceptar (Enter)"
-                                                                    >
-                                                                        <Check className="w-3 h-3" />
-                                                                    </button>
-                                                                    <button
-                                                                        onClick={handleCancelEdit}
-                                                                        disabled={savingCell}
-                                                                        className="p-1 bg-red-500 hover:bg-red-600 text-white rounded disabled:opacity-50"
-                                                                        title="Cancelar (Esc)"
-                                                                    >
-                                                                        <X className="w-3 h-3" />
-                                                                    </button>
-                                                                </div>
-                                                            ) : (
-                                                                <span
-                                                                    onDoubleClick={() => handleCellDoubleClick(student, 'apellido')}
-                                                                    className="cursor-pointer hover:bg-blue-50 dark:hover:bg-blue-900/30 px-1 rounded transition"
-                                                                    title="Doble click para editar"
-                                                                >
-                                                                    {student.apellido}
-                                                                </span>
-                                                            )}
-                                                            {isBirthdayToday(student) && (
-                                                                <span
-                                                                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-pink-100 dark:bg-pink-900/40 text-pink-600 dark:text-pink-400 text-xs font-medium animate-pulse"
-                                                                    title={`¡Hoy es el cumpleaños de ${student.nombre}! 🎂`}
-                                                                >
-                                                                    <Cake className="w-3.5 h-3.5" />
-                                                                    ¡Cumple!
-                                                                </span>
-                                                            )}
-                                                        </div>
+                                                    <div className="flex-1 min-w-0">
+                                                        {editingCell?.studentId === student.id && editingCell?.field === 'nombre' ? (
+                                                            <div className="flex gap-1">
+                                                                <input
+                                                                    autoFocus
+                                                                    type="text"
+                                                                    defaultValue={getDisplayValue(student, 'nombre')}
+                                                                    onBlur={(e) => {
+                                                                        const val = e.target.value.trim();
+                                                                        if (val && val !== student.nombre) setCellValue(student.id, 'nombre', val);
+                                                                    }}
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === 'Enter') {
+                                                                            // Move focus to apellido input
+                                                                            const next = (e.target as HTMLInputElement).parentElement?.querySelector<HTMLInputElement>('input:last-of-type');
+                                                                            if (next && next !== e.target) next.focus();
+                                                                            else (e.target as HTMLInputElement).blur();
+                                                                        }
+                                                                        if (e.key === 'Escape') stopEditing();
+                                                                    }}
+                                                                    className="w-1/2 px-2 py-0.5 text-sm border border-blue-400 rounded bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                                    placeholder="Nombre"
+                                                                />
+                                                                <input
+                                                                    type="text"
+                                                                    defaultValue={pendingChanges[student.id]?.apellido !== undefined ? String(pendingChanges[student.id].apellido) : student.apellido}
+                                                                    onBlur={(e) => {
+                                                                        const val = e.target.value.trim();
+                                                                        if (val && val !== student.apellido) setCellValue(student.id, 'apellido', val);
+                                                                        stopEditing();
+                                                                    }}
+                                                                    onKeyDown={(e) => {
+                                                                        if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                                                        if (e.key === 'Escape') stopEditing();
+                                                                    }}
+                                                                    className="w-1/2 px-2 py-0.5 text-sm border border-blue-400 rounded bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                                    placeholder="Apellido"
+                                                                />
+                                                            </div>
+                                                        ) : (
+                                                            <div
+                                                                className={`font-medium text-gray-800 dark:text-gray-200 flex items-center gap-1.5 cursor-pointer rounded px-1 -mx-1 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors ${pendingChanges[student.id]?.nombre !== undefined || pendingChanges[student.id]?.apellido !== undefined ? 'bg-yellow-50 dark:bg-yellow-900/20 ring-1 ring-yellow-300 dark:ring-yellow-700' : ''}`}
+                                                                onDoubleClick={() => startEditing(student.id, 'nombre')}
+                                                                title="Doble click para editar nombre y apellido"
+                                                            >
+                                                                {getDisplayValue(student, 'nombre')} {pendingChanges[student.id]?.apellido !== undefined ? String(pendingChanges[student.id].apellido) : student.apellido}
+                                                                {isBirthdayToday(student) && (
+                                                                    <span className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-pink-100 dark:bg-pink-900/40 text-pink-600 dark:text-pink-400 text-xs font-medium animate-pulse">
+                                                                        <Cake className="w-3.5 h-3.5" />
+                                                                        ¡Cumple!
+                                                                    </span>
+                                                                )}
+                                                            </div>
+                                                        )}
                                                         <div className="text-xs text-gray-500">
                                                             {student.sexo === 'Masculino' ? '♂' : student.sexo === 'Femenino' ? '♀' : ''}
                                                             {student.email && <span className="ml-1">{student.email}</span>}
@@ -787,123 +813,225 @@ export const StudentsPage = () => {
                                                 </div>
                                             </td>
                                             <td className="px-4 py-3 text-sm hidden sm:table-cell">
-                                                {(() => {
-                                                    const { age, source } = getStudentAge(student);
-                                                    if (age === null) {
-                                                        return <span className="text-gray-400">-</span>;
-                                                    }
-                                                    if (source === 'calculated') {
-                                                        return (
-                                                            <span
-                                                                className="inline-flex items-center gap-1 text-green-600 dark:text-green-400"
-                                                                title={`Calculado desde fecha de nacimiento: ${student.nac}`}
-                                                            >
-                                                                <Calendar className="w-3 h-3" />
-                                                                {age} años
-                                                            </span>
-                                                        );
-                                                    }
-                                                    // Hardcoded age
-                                                    return (
-                                                        <span
-                                                            className="text-amber-600 dark:text-amber-400"
-                                                            title="Edad guardada manualmente (sin fecha de nacimiento)"
-                                                        >
-                                                            {age} años*
-                                                        </span>
-                                                    );
-                                                })()}
+                                                {editingCell?.studentId === student.id && editingCell?.field === 'nac' ? (
+                                                    <input
+                                                        autoFocus
+                                                        type="text"
+                                                        defaultValue={pendingChanges[student.id]?.nac !== undefined ? String(pendingChanges[student.id].nac) : (student.nac || '')}
+                                                        onBlur={(e) => {
+                                                            const val = e.target.value.trim();
+                                                            if (val !== (student.nac || '')) setCellValue(student.id, 'nac', val);
+                                                            stopEditing();
+                                                        }}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                                            if (e.key === 'Escape') stopEditing();
+                                                        }}
+                                                        className="w-28 px-2 py-0.5 text-xs border border-blue-400 rounded bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                        placeholder="DD/MM/AAAA"
+                                                    />
+                                                ) : (
+                                                    <div
+                                                        className={`cursor-pointer rounded px-1 -mx-1 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors inline-flex ${pendingChanges[student.id]?.nac !== undefined || pendingChanges[student.id]?.edad !== undefined ? 'bg-yellow-50 dark:bg-yellow-900/20 ring-1 ring-yellow-300 dark:ring-yellow-700' : ''}`}
+                                                        onDoubleClick={() => startEditing(student.id, 'nac')}
+                                                        title={`Doble click para editar fecha de nacimiento${student.nac ? ` (${student.nac})` : ''}`}
+                                                    >
+                                                        {(() => {
+                                                            // Check pending nac change
+                                                            const nacVal = pendingChanges[student.id]?.nac !== undefined ? String(pendingChanges[student.id].nac) : student.nac;
+                                                            if (nacVal) {
+                                                                const birthDate = parseBirthDate(nacVal);
+                                                                if (birthDate) {
+                                                                    const calcAge = calculateAge(birthDate);
+                                                                    if (calcAge >= 0 && calcAge < 120) {
+                                                                        return (
+                                                                            <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
+                                                                                <Calendar className="w-3 h-3" />
+                                                                                {calcAge} años
+                                                                            </span>
+                                                                        );
+                                                                    }
+                                                                }
+                                                            }
+                                                            const { age, source } = getStudentAge(student);
+                                                            if (age === null) return <span className="text-gray-400">-</span>;
+                                                            if (source === 'calculated') {
+                                                                return (
+                                                                    <span className="inline-flex items-center gap-1 text-green-600 dark:text-green-400">
+                                                                        <Calendar className="w-3 h-3" />
+                                                                        {age} años
+                                                                    </span>
+                                                                );
+                                                            }
+                                                            return <span className="text-amber-600 dark:text-amber-400">{age} años*</span>;
+                                                        })()}
+                                                    </div>
+                                                )}
                                             </td>
                                             <td className="px-4 py-3">
                                                 {editingCell?.studentId === student.id && editingCell?.field === 'instrumento' ? (
-                                                    <div className="flex items-center gap-1">
-                                                        <select
-                                                            autoFocus
-                                                            value={tempEditValue || ''}
-                                                            onChange={(e) => handleCellValueChange(e.target.value)}
-                                                            onKeyDown={handleCellKeyDown}
-                                                            disabled={savingCell}
-                                                            className="px-2 py-1 border-2 border-blue-500 rounded bg-white dark:bg-gray-700 text-xs"
-                                                        >
-                                                            <option value="">Sin asignar</option>
-                                                            {uniqueInstruments.map(inst => (
-                                                                <option key={inst} value={inst}>{inst}</option>
-                                                            ))}
-                                                        </select>
-                                                        <button
-                                                            onClick={handleAcceptEdit}
-                                                            disabled={savingCell}
-                                                            className="p-1 bg-green-500 hover:bg-green-600 text-white rounded disabled:opacity-50"
-                                                            title="Aceptar (Enter)"
-                                                        >
-                                                            <Check className="w-3 h-3" />
-                                                        </button>
-                                                        <button
-                                                            onClick={handleCancelEdit}
-                                                            disabled={savingCell}
-                                                            className="p-1 bg-red-500 hover:bg-red-600 text-white rounded disabled:opacity-50"
-                                                            title="Cancelar (Esc)"
-                                                        >
-                                                            <X className="w-3 h-3" />
-                                                        </button>
-                                                    </div>
+                                                    <input
+                                                        autoFocus
+                                                        type="text"
+                                                        defaultValue={getDisplayValue(student, 'instrumento')}
+                                                        onBlur={(e) => {
+                                                            const val = e.target.value.trim();
+                                                            if (val !== getInstrumentName(student.instrumento)) setCellValue(student.id, 'instrumento', val);
+                                                            stopEditing();
+                                                        }}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                                            if (e.key === 'Escape') stopEditing();
+                                                        }}
+                                                        className="w-full px-2 py-0.5 text-xs border border-blue-400 rounded bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                        placeholder="Instrumento"
+                                                    />
                                                 ) : (
                                                     <span
-                                                        onDoubleClick={() => handleCellDoubleClick(student, 'instrumento')}
-                                                        className="px-2 py-0.5 rounded bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 text-xs font-medium cursor-pointer hover:bg-purple-200 dark:hover:bg-purple-900/50 transition"
-                                                        title="Doble click para editar"
+                                                        className={`px-2 py-0.5 rounded text-xs font-medium cursor-pointer transition-colors ${pendingChanges[student.id]?.instrumento !== undefined
+                                                            ? 'bg-yellow-100 dark:bg-yellow-900/30 text-yellow-700 dark:text-yellow-300 ring-1 ring-yellow-300 dark:ring-yellow-700'
+                                                            : 'bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 hover:bg-purple-200 dark:hover:bg-purple-800/40'
+                                                        }`}
+                                                        onDoubleClick={() => startEditing(student.id, 'instrumento')}
+                                                        title="Doble click para editar instrumento"
                                                     >
-                                                        {getInstrumentName(student.instrumento)}
+                                                        {getDisplayValue(student, 'instrumento') || 'Sin asignar'}
                                                     </span>
                                                 )}
                                             </td>
                                             <td className="px-4 py-3 text-sm hidden md:table-cell">
-                                                {getPrimaryPhone(student) ? (
-                                                    <div>
-                                                        <div className="text-gray-800 dark:text-gray-200 text-xs">
-                                                            {getPrimaryContactName(student)}
-                                                        </div>
-                                                        <a href={`tel:${getPrimaryPhone(student)}`} className="text-blue-500 hover:underline text-xs flex items-center gap-1">
-                                                            <Phone className="w-3 h-3" />
-                                                            {formatPhoneNumber(getPrimaryPhone(student))}
-                                                        </a>
+                                                {editingCell?.studentId === student.id && editingCell?.field === 'tlf_madre' ? (
+                                                    <div className="space-y-1">
+                                                        <input
+                                                            autoFocus
+                                                            type="tel"
+                                                            defaultValue={getDisplayValue(student, 'tlf_madre')}
+                                                            onBlur={(e) => {
+                                                                const val = e.target.value.trim();
+                                                                if (val !== (student.tlf_madre || '')) setCellValue(student.id, 'tlf_madre', val);
+                                                                stopEditing();
+                                                            }}
+                                                            onKeyDown={(e) => {
+                                                                if (e.key === 'Enter') (e.target as HTMLInputElement).blur();
+                                                                if (e.key === 'Escape') stopEditing();
+                                                            }}
+                                                            className="w-full px-2 py-0.5 text-xs border border-blue-400 rounded bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                                                            placeholder="Teléfono contacto"
+                                                        />
                                                     </div>
                                                 ) : (
-                                                    <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-medium">
-                                                        <PhoneOff className="w-3 h-3" />
-                                                        Sin contacto
-                                                    </span>
+                                                    <div
+                                                        className={`cursor-pointer rounded px-1 -mx-1 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors ${pendingChanges[student.id]?.tlf_madre !== undefined || pendingChanges[student.id]?.tlf_padre !== undefined || pendingChanges[student.id]?.madre !== undefined || pendingChanges[student.id]?.padre !== undefined
+                                                            ? 'bg-yellow-50 dark:bg-yellow-900/20 ring-1 ring-yellow-300 dark:ring-yellow-700' : ''}`}
+                                                        onDoubleClick={() => startEditing(student.id, 'tlf_madre')}
+                                                        title="Doble click para editar contacto"
+                                                    >
+                                                        {getPrimaryPhone(student) ? (
+                                                            <>
+                                                                <div className="text-gray-800 dark:text-gray-200 text-xs">
+                                                                    {getPrimaryContactName(student)}
+                                                                </div>
+                                                                <div className="text-blue-500 text-xs flex items-center gap-1">
+                                                                    <Phone className="w-3 h-3" />
+                                                                    {formatPhoneNumber(getPrimaryPhone(student))}
+                                                                </div>
+                                                            </>
+                                                        ) : (
+                                                            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-400 text-xs font-medium">
+                                                                <PhoneOff className="w-3 h-3" />
+                                                                Sin contacto
+                                                            </span>
+                                                        )}
+                                                    </div>
                                                 )}
                                             </td>
                                             <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-400 hidden lg:table-cell">
-                                                {student.grupo?.length ? (
-                                                    <div className="flex flex-wrap gap-1">
-                                                        {student.grupo.slice(0, 2).map((g, i) => (
-                                                            <span key={i} className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs">
-                                                                {g}
-                                                            </span>
-                                                        ))}
-                                                        {student.grupo.length > 2 && (
-                                                            <span className="text-xs text-gray-500">+{student.grupo.length - 2}</span>
-                                                        )}
+                                                {editingCell?.studentId === student.id && editingCell?.field === 'grupo' ? (
+                                                    <div className="relative">
+                                                        <div className="flex flex-wrap gap-1 p-2 border border-blue-400 rounded bg-white dark:bg-gray-700 max-w-xs">
+                                                            {GRUPOS_DISPONIBLES.map(g => {
+                                                                const currentGrupos: string[] = pendingChanges[student.id]?.grupo !== undefined
+                                                                    ? (pendingChanges[student.id].grupo as string[])
+                                                                    : (student.grupo || []);
+                                                                const isSelected = currentGrupos.includes(g);
+                                                                return (
+                                                                    <button
+                                                                        key={g}
+                                                                        type="button"
+                                                                        onClick={() => {
+                                                                            const newGrupos = isSelected
+                                                                                ? currentGrupos.filter(x => x !== g)
+                                                                                : [...currentGrupos, g];
+                                                                            setCellValue(student.id, 'grupo', newGrupos);
+                                                                        }}
+                                                                        className={`px-2 py-0.5 rounded text-xs font-medium transition-colors ${isSelected
+                                                                            ? 'bg-blue-500 text-white'
+                                                                            : 'bg-gray-100 dark:bg-gray-600 text-gray-600 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-500'
+                                                                        }`}
+                                                                    >
+                                                                        {g}
+                                                                    </button>
+                                                                );
+                                                            })}
+                                                        </div>
+                                                        <button
+                                                            onClick={stopEditing}
+                                                            className="mt-1 px-2 py-0.5 text-xs text-blue-600 dark:text-blue-400 hover:underline"
+                                                        >
+                                                            Cerrar
+                                                        </button>
                                                     </div>
                                                 ) : (
-                                                    <span className="text-gray-400 italic">Sin grupos</span>
+                                                    <div
+                                                        className={`cursor-pointer rounded px-1 -mx-1 hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors ${pendingChanges[student.id]?.grupo !== undefined ? 'bg-yellow-50 dark:bg-yellow-900/20 ring-1 ring-yellow-300 dark:ring-yellow-700' : ''}`}
+                                                        onDoubleClick={() => startEditing(student.id, 'grupo')}
+                                                        title="Doble click para editar grupos"
+                                                    >
+                                                        {(() => {
+                                                            const grupos: string[] = pendingChanges[student.id]?.grupo !== undefined
+                                                                ? (pendingChanges[student.id].grupo as string[])
+                                                                : (student.grupo || []);
+                                                            if (grupos.length > 0) {
+                                                                return (
+                                                                    <div className="flex flex-wrap gap-1">
+                                                                        {grupos.slice(0, 2).map((g, i) => (
+                                                                            <span key={i} className="px-2 py-0.5 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded text-xs">
+                                                                                {g}
+                                                                            </span>
+                                                                        ))}
+                                                                        {grupos.length > 2 && (
+                                                                            <span className="text-xs text-gray-500">+{grupos.length - 2}</span>
+                                                                        )}
+                                                                    </div>
+                                                                );
+                                                            }
+                                                            return <span className="text-gray-400 italic">Sin grupos</span>;
+                                                        })()}
+                                                    </div>
                                                 )}
                                             </td>
                                             <td className="px-4 py-3">
                                                 <div className="flex flex-wrap gap-1">
-                                                    {/* Activo Status - Double-click to toggle */}
-                                                    <span
-                                                        onDoubleClick={() => toggleActivoDoubleClick(student.id, student.activo)}
-                                                        className={`px-2 py-1 rounded-full text-xs font-medium cursor-pointer hover:opacity-80 transition ${student.activo
-                                                                ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-200'
-                                                                : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200'
-                                                            }`}
-                                                        title="Doble click para cambiar estado"
-                                                    >
-                                                        {student.activo ? 'Activo' : 'Inactivo'}
-                                                    </span>
+                                                    {(() => {
+                                                        const isActivo = pendingChanges[student.id]?.activo !== undefined
+                                                            ? pendingChanges[student.id].activo
+                                                            : student.activo;
+                                                        const hasChange = pendingChanges[student.id]?.activo !== undefined;
+                                                        return (
+                                                            <span
+                                                                className={`px-2 py-1 rounded-full text-xs font-medium cursor-pointer transition-colors ${isActivo
+                                                                    ? 'bg-green-100 text-green-700 dark:bg-green-900/30 dark:text-green-400 hover:bg-green-200 dark:hover:bg-green-800/40'
+                                                                    : 'bg-gray-100 text-gray-700 dark:bg-gray-700 dark:text-gray-400 hover:bg-gray-200 dark:hover:bg-gray-600'
+                                                                } ${hasChange ? 'ring-1 ring-yellow-300 dark:ring-yellow-700' : ''}`}
+                                                                onDoubleClick={() => {
+                                                                    setCellValue(student.id, 'activo', !isActivo);
+                                                                }}
+                                                                title="Doble click para cambiar estado"
+                                                            >
+                                                                {isActivo ? 'Activo' : 'Inactivo'}
+                                                            </span>
+                                                        );
+                                                    })()}
                                                     {hasIncompleteData(student) && (
                                                         <span className="px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-700 dark:bg-orange-900/30 dark:text-orange-400">
                                                             Pendiente
@@ -1440,6 +1568,41 @@ export const StudentsPage = () => {
                                     {saving ? 'Guardando...' : 'Guardar'}
                                 </button>
                             </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Floating Save Bar for Inline Edits */}
+                {hasPendingChanges && (
+                    <div className="fixed bottom-6 left-1/2 -translate-x-1/2 z-40 animate-in slide-in-from-bottom-4 duration-300">
+                        <div className="flex items-center gap-3 px-5 py-3 bg-gray-900 dark:bg-gray-100 text-white dark:text-gray-900 rounded-xl shadow-2xl border border-gray-700 dark:border-gray-300">
+                            <div className="flex items-center gap-2 text-sm">
+                                <div className="w-2 h-2 rounded-full bg-yellow-400 animate-pulse" />
+                                <span className="font-medium">
+                                    {pendingCount} alumno{pendingCount > 1 ? 's' : ''} modificado{pendingCount > 1 ? 's' : ''}
+                                </span>
+                            </div>
+                            <div className="w-px h-6 bg-gray-600 dark:bg-gray-400" />
+                            <button
+                                onClick={discardChanges}
+                                disabled={savingInline}
+                                className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-300 dark:text-gray-600 hover:text-white dark:hover:text-gray-900 hover:bg-gray-800 dark:hover:bg-gray-200 rounded-lg transition-colors"
+                            >
+                                <Undo2 className="w-4 h-4" />
+                                Descartar
+                            </button>
+                            <button
+                                onClick={saveAllChanges}
+                                disabled={savingInline}
+                                className="flex items-center gap-1.5 px-4 py-1.5 text-sm bg-blue-500 hover:bg-blue-600 disabled:opacity-50 text-white rounded-lg font-medium transition-colors"
+                            >
+                                {savingInline ? (
+                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                ) : (
+                                    <Check className="w-4 h-4" />
+                                )}
+                                {savingInline ? 'Guardando...' : 'Guardar cambios'}
+                            </button>
                         </div>
                     </div>
                 )}

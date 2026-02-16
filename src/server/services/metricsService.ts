@@ -113,8 +113,13 @@ class MetricsService {
             this.flush();
         }, 5000);
 
-        // Ensure flush on process exit
+        // Ensure flush on process exit and termination signals
         process.on('beforeExit', () => this.flush());
+        const gracefulFlush = () => {
+            this.flush();
+        };
+        process.on('SIGTERM', gracefulFlush);
+        process.on('SIGINT', gracefulFlush);
     }
 
     /**

@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_URL = import.meta.env.VITE_API_URL || '';
+export const API_URL = import.meta.env.VITE_API_URL || '';
 
 export const api = axios.create({
     baseURL: `${API_URL}/api`,
@@ -34,6 +34,7 @@ api.interceptors.response.use(
 export const statusApi = {
     getStatus: () => api.get('/status'),
     getQR: () => api.get('/status/qr'),
+    reconnect: () => api.post('/session/reconnect'),
     logout: () => api.post('/auth/logout'),
 };
 
@@ -41,6 +42,10 @@ export const chatApi = {
     getChats: () => api.get('/chats'),
     getMessages: (jid: string, limit = 50) =>
         api.get(`/chats/${encodeURIComponent(jid)}/messages`, { params: { limit } }),
+    getChatHistory: (jid: string, limit = 50, beforeMessageId?: string, includeMedia = false) =>
+        api.get(`/chats/${encodeURIComponent(jid)}/history`, { 
+            params: { limit, before: beforeMessageId, includeMedia } 
+        }),
     toggleBot: (jid: string, active: boolean) =>
         api.post(`/chats/${encodeURIComponent(jid)}/bot-toggle`, { active }),
     markAsRead: (jid: string, messageIds?: string[], timestamp?: number) =>
@@ -48,8 +53,14 @@ export const chatApi = {
 };
 
 export const aiApi = {
-    updateConfig: (apiKey: string) => 
-        api.post('/config/ai', { apiKey }),
+    updateConfig: (config: { geminiApiKey?: string; groqApiKey?: string; preferredProvider?: string; enableFailover?: boolean }) =>
+        api.post('/config/ai', config),
+    testConfig: (data: { apiKey?: string; provider?: string }) =>
+        api.post('/config/ai/test', data),
+    generateTemplate: (data: any) =>
+        api.post('/ai/generate-template', data),
+    generateVariation: (data: any) =>
+        api.post('/ai/generate-variation', data),
 };
 
 export const contactApi = {
@@ -64,25 +75,25 @@ export const contactApi = {
 export const knowledgeApi = {
     getConfig: () => api.get('/knowledge/config'),
     updateConfig: (config: any) => api.put('/knowledge/config', config),
-    
+
     getCategories: (all?: boolean) => api.get('/knowledge/categories', { params: { all } }),
     addCategory: (category: any) => api.post('/knowledge/categories', category),
     updateCategory: (id: string, category: any) => api.put(`/knowledge/categories/${id}`, category),
     deleteCategory: (id: string) => api.delete(`/knowledge/categories/${id}`),
-    
-    getFaqs: (params?: { category?: string; approved?: boolean }) => 
+
+    getFaqs: (params?: { category?: string; approved?: boolean }) =>
         api.get('/knowledge/faqs', { params }),
     getFaq: (id: string) => api.get(`/knowledge/faqs/${id}`),
     addFaq: (faq: any) => api.post('/knowledge/faqs', faq),
     updateFaq: (id: string, faq: any) => api.put(`/knowledge/faqs/${id}`, faq),
     deleteFaq: (id: string) => api.delete(`/knowledge/faqs/${id}`),
     approveFaq: (id: string) => api.post(`/knowledge/faqs/${id}/approve`),
-    
-    search: (query: string, limit?: number) => 
+
+    search: (query: string, limit?: number) =>
         api.get('/knowledge/search', { params: { query, limit } }),
     learn: (question: string, answer: string, category?: string) =>
         api.post('/knowledge/learn', { question, answer, category }),
-    
+
     exportData: () => api.get('/knowledge/export'),
     importData: (data: any) => api.post('/knowledge/import', { data }),
     getStats: () => api.get('/knowledge/stats'),
@@ -94,24 +105,24 @@ export const knowledgeApi = {
 export const escalationApi = {
     getConfig: () => api.get('/escalation/config'),
     updateConfig: (config: any) => api.put('/escalation/config', config),
-    
+
     getAdmins: (active?: boolean) => api.get('/escalation/admins', { params: { active } }),
     addAdmin: (admin: any) => api.post('/escalation/admins', admin),
     updateAdmin: (jid: string, admin: any) => api.put(`/escalation/admins/${encodeURIComponent(jid)}`, admin),
     removeAdmin: (jid: string) => api.delete(`/escalation/admins/${encodeURIComponent(jid)}`),
-    
+
     getTickets: (params?: { status?: string; priority?: string; assignedTo?: string }) =>
         api.get('/escalation/tickets', { params }),
     getPendingTickets: () => api.get('/escalation/tickets/pending'),
     getTicket: (id: string) => api.get(`/escalation/tickets/${id}`),
     createTicket: (ticket: any) => api.post('/escalation/tickets', ticket),
     updateTicket: (id: string, ticket: any) => api.put(`/escalation/tickets/${id}`, ticket),
-    assignTicket: (id: string, adminJid: string) => 
+    assignTicket: (id: string, adminJid: string) =>
         api.post(`/escalation/tickets/${id}/assign`, { adminJid }),
     resolveTicket: (id: string, response: string, shouldLearn?: boolean) =>
         api.post(`/escalation/tickets/${id}/resolve`, { response, shouldLearn }),
     closeTicket: (id: string) => api.post(`/escalation/tickets/${id}/close`),
-    
+
     getStats: () => api.get('/escalation/stats'),
 };
 
@@ -121,27 +132,27 @@ export const escalationApi = {
 export const broadcastApi = {
     getConfig: () => api.get('/broadcast/config'),
     updateConfig: (config: any) => api.put('/broadcast/config', config),
-    
+
     // Contact Lists
     getLists: () => api.get('/broadcast/lists'),
     getList: (id: string) => api.get(`/broadcast/lists/${id}`),
     createList: (list: any) => api.post('/broadcast/lists', list),
     updateList: (id: string, list: any) => api.put(`/broadcast/lists/${id}`, list),
     deleteList: (id: string) => api.delete(`/broadcast/lists/${id}`),
-    addContact: (listId: string, contact: any) => 
+    addContact: (listId: string, contact: any) =>
         api.post(`/broadcast/lists/${listId}/contacts`, contact),
     removeContact: (listId: string, jid: string) =>
         api.delete(`/broadcast/lists/${listId}/contacts/${encodeURIComponent(jid)}`),
     importContacts: (listId: string, contacts: any[]) =>
         api.post(`/broadcast/lists/${listId}/import`, { contacts }),
-    
+
     // Templates
     getTemplates: () => api.get('/broadcast/templates'),
     getTemplate: (id: string) => api.get(`/broadcast/templates/${id}`),
     createTemplate: (template: any) => api.post('/broadcast/templates', template),
     updateTemplate: (id: string, template: any) => api.put(`/broadcast/templates/${id}`, template),
     deleteTemplate: (id: string) => api.delete(`/broadcast/templates/${id}`),
-    
+
     // Campaigns
     getCampaigns: () => api.get('/broadcast/campaigns'),
     getCampaign: (id: string) => api.get(`/broadcast/campaigns/${id}`),
@@ -151,7 +162,7 @@ export const broadcastApi = {
     startCampaign: (id: string) => api.post(`/broadcast/campaigns/${id}/start`),
     pauseCampaign: (id: string) => api.post(`/broadcast/campaigns/${id}/pause`),
     getCampaignProgress: (id: string) => api.get(`/broadcast/campaigns/${id}/progress`),
-    
+
     getStats: () => api.get('/broadcast/stats'),
 };
 
@@ -161,7 +172,7 @@ export const broadcastApi = {
 // Helper to create FormData or JSON
 const createMessagePayload = (data: Record<string, any>) => {
     const hasFile = Object.values(data).some(value => value instanceof File);
-    
+
     if (hasFile) {
         const formData = new FormData();
         Object.entries(data).forEach(([key, value]) => {
@@ -171,7 +182,7 @@ const createMessagePayload = (data: Record<string, any>) => {
         });
         return formData;
     }
-    
+
     return data;
 };
 
@@ -242,32 +253,53 @@ export const configApi = {
 // Alerts API (Smart Bot Escalations)
 // ==========================================
 export const alertApi = {
-    getAlerts: (status?: 'pending' | 'all') => 
+    getAlerts: (status?: 'pending' | 'all') =>
         api.get('/alerts', { params: { status } }),
     getAlert: (id: string) => api.get(`/alerts/${id}`),
-    getAlertsByChat: (jid: string) => 
+    getAlertsByChat: (jid: string) =>
         api.get(`/alerts/chat/${encodeURIComponent(jid)}`),
-    respondToAlert: (id: string, response: string, shouldLearn: boolean = true) =>
-        api.post(`/alerts/${id}/respond`, { response, shouldLearn }),
+    respondToAlert: (
+        id: string,
+        response: string,
+        shouldLearn: boolean = true,
+        options?: {
+            deliveryMode?: 'now' | 'scheduled' | 'manual';
+            scheduledFor?: string;
+            respondedBy?: string;
+        }
+    ) =>
+        api.post(`/alerts/${id}/respond`, {
+            response,
+            shouldLearn,
+            deliveryMode: options?.deliveryMode || 'now',
+            scheduledFor: options?.scheduledFor,
+            respondedBy: options?.respondedBy
+        }),
     dismissAlert: (id: string, reason?: string) =>
         api.post(`/alerts/${id}/dismiss`, { reason }),
     getStats: () => api.get('/alerts/stats'),
+
+    // New features
+    getFrequentUnanswered: (threshold: number = 0.7) =>
+        api.get('/alerts/frequent-unanswered', { params: { threshold } }),
+    getExportUrl: (status: string = 'pending') =>
+        `${API_URL}/api/alerts/export?status=${status}`,
 };
 
 // ==========================================
 // Bot Assignments API (Per-chat config)
 // ==========================================
 export const botAssignmentApi = {
-    getAll: (activeOnly?: boolean) => 
+    getAll: (activeOnly?: boolean) =>
         api.get('/bot-assignments', { params: { active: activeOnly } }),
-    getByJid: (jid: string) => 
+    getByJid: (jid: string) =>
         api.get(`/bot-assignments/${encodeURIComponent(jid)}`),
     createOrUpdate: (data: any) => api.post('/bot-assignments', data),
-    update: (jid: string, config: any) => 
+    update: (jid: string, config: any) =>
         api.put(`/bot-assignments/${encodeURIComponent(jid)}`, config),
     toggleBot: (jid: string, enabled: boolean, chatName?: string) =>
         api.post(`/bot-assignments/${encodeURIComponent(jid)}/toggle`, { enabled, chatName }),
-    delete: (jid: string) => 
+    delete: (jid: string) =>
         api.delete(`/bot-assignments/${encodeURIComponent(jid)}`),
     getDefaultConfig: () => api.get('/bot-assignments/default'),
     updateDefaultConfig: (config: any) => api.put('/bot-assignments/default', config),
@@ -308,6 +340,44 @@ export interface Trigger {
     createdAt: string;
     updatedAt: string;
 }
+
+// ==========================================
+// Daily Reminders API
+// ==========================================
+export const dailyReminderApi = {
+    getStatus: () => api.get('/daily-reminders/status'),
+    getConfig: () => api.get('/daily-reminders/config'),
+    updateConfig: (config: any) => api.post('/daily-reminders/config', config),
+    searchContacts: (query: string) => api.get('/daily-reminders/search-contacts', { params: { q: query } }),
+    getWhatsAppStatus: () => api.get('/daily-reminders/whatsapp-status'),
+    getWhatsAppGroups: () => api.get('/daily-reminders/whatsapp-groups'),
+    test: () => api.post('/daily-reminders/test'),
+    testConfig: (apiKey?: string) => api.post('/config/ai/test', { apiKey }),
+    updateConfigKey: (apiKey: string) => api.post('/config/ai', { apiKey }),
+    generateDraft: () => api.post('/daily-reminders/generate-draft'),
+    execute: () => api.post('/daily-reminders/execute'),
+    executeManualSend: (number: string, message: string) =>
+        api.post('/messages/text', { number, message }),
+    // Templates CRUD
+    getTemplates: (category?: string) => api.get('/daily-reminders/templates', { params: { category } }),
+    saveTemplate: (data: { name: string; content: string; category: string; id?: string }) =>
+        api.post('/daily-reminders/templates', data),
+    deleteTemplate: (id: string) => api.delete(`/daily-reminders/templates/${id}`),
+    // Schedule
+    schedule: (data: { jid: string; message: string; scheduledFor: string }) =>
+        api.post('/daily-reminders/schedule', data),
+    getAttendanceMessageTemplates: () => api.get('/daily-reminders/attendance-message-templates'),
+    updateAttendanceMessageTemplate: (
+        action: 'teacher_reminder' | 'parent_absence_alert',
+        template: string
+    ) => api.put(`/daily-reminders/attendance-message-templates/${action}`, { template }),
+    resetAttendanceMessageTemplate: (action: 'teacher_reminder' | 'parent_absence_alert') =>
+        api.post(`/daily-reminders/attendance-message-templates/${action}/reset`),
+    getAttendanceMessageTemplateHistory: (params?: {
+        action?: 'teacher_reminder' | 'parent_absence_alert';
+        limit?: number;
+    }) => api.get('/daily-reminders/attendance-message-templates/history', { params }),
+};
 
 export const triggerApi = {
     // Config & Control

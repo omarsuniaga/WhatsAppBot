@@ -2,9 +2,10 @@
  * BotAssignmentService - Manages bot configuration per chat
  * Each chat can have customized bot behavior, personality, and limits
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { EventEmitter } from 'events';
+import { writeFileSyncAtomic } from '../utils/atomicWrite';
 
 export interface BotConfig {
     enabled: boolean;
@@ -21,6 +22,7 @@ export interface BotConfig {
     autoEscalate: boolean;
     escalateThreshold: number;
     learningEnabled: boolean;
+    requireHumanApproval: boolean;
 }
 
 export interface BotStats {
@@ -63,7 +65,8 @@ const DEFAULT_BOT_CONFIG: BotConfig = {
     responseDelayMs: 1500,
     autoEscalate: true,
     escalateThreshold: 0.7,
-    learningEnabled: true
+    learningEnabled: true,
+    requireHumanApproval: false
 };
 
 class BotAssignmentService extends EventEmitter {
@@ -85,7 +88,24 @@ class BotAssignmentService extends EventEmitter {
     private load(): AssignmentsData {
         try {
             if (existsSync(DATA_PATH)) {
-                return JSON.parse(readFileSync(DATA_PATH, 'utf-8'));
+                const loaded = JSON.parse(readFileSync(DATA_PATH, 'utf-8')) as Partial<AssignmentsData>;
+                const mergedDefaultConfig: BotConfig = {
+                    ...DEFAULT_BOT_CONFIG,
+                    ...(loaded.defaultConfig || {})
+                };
+                const mergedAssignments = (loaded.assignments || []).map((assignment: any) => ({
+                    ...assignment,
+                    botConfig: {
+                        ...mergedDefaultConfig,
+                        ...(assignment?.botConfig || {})
+                    }
+                }));
+
+                return {
+                    version: loaded.version || 1,
+                    defaultConfig: mergedDefaultConfig,
+                    assignments: mergedAssignments
+                };
             }
         } catch (error) {
             console.error('[BotAssignmentService] Error loading data:', error);
@@ -104,7 +124,7 @@ class BotAssignmentService extends EventEmitter {
             if (!existsSync(dir)) {
                 mkdirSync(dir, { recursive: true });
             }
-            writeFileSync(DATA_PATH, JSON.stringify(this.data, null, 2));
+            writeFileSyncAtomic(DATA_PATH, JSON.stringify(this.data, null, 2));
         } catch (error) {
             console.error('[BotAssignmentService] Error saving data:', error);
         }

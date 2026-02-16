@@ -38,18 +38,25 @@ export const ChatList = ({ onSelectChat }: ChatListProps) => {
     const [sortOrder, setSortOrder] = useState<'recent' | 'unread' | 'name'>('recent');
     const [showSettingsMenu, setShowSettingsMenu] = useState(false);
     const [showSettingsPanel, setShowSettingsPanel] = useState(false);
+    const [fetchError, setFetchError] = useState<string | null>(null);
+    const [lastFetchTime, setLastFetchTime] = useState<number>(Date.now());
 
     useEffect(() => {
         const fetchChats = async (isInitial = true) => {
             // Only show loading on initial fetch
             if (isInitial && chats.length === 0) {
                 setLoadingChats(true);
+                setFetchError(null);
             }
             try {
                 const response = await chatApi.getChats();
                 if (response.data.success) {
                     const newChats = response.data.data || [];
-                    
+
+                    // Clear error on successful fetch
+                    setFetchError(null);
+                    setLastFetchTime(Date.now());
+
                     // 🔍 DEBUG: Log API response
                     console.log('[ChatList] API Response:', {
                         count: newChats.length,
@@ -62,7 +69,7 @@ export const ChatList = ({ onSelectChat }: ChatListProps) => {
                             unreadCount: c.unreadCount
                         }))
                     });
-                    
+
                     if (isInitial) {
                         // Initial load: replace all chats
                         setChats(newChats);
@@ -70,9 +77,13 @@ export const ChatList = ({ onSelectChat }: ChatListProps) => {
                         // Refresh: merge preserving local unreadCount for active chat
                         mergeChats(newChats);
                     }
+                } else {
+                    setFetchError(response.data.error || 'Error al cargar chats');
                 }
-            } catch (error) {
+            } catch (error: any) {
                 console.error('Failed to fetch chats:', error);
+                const errorMsg = error?.response?.data?.error || error?.message || 'No se pudo conectar al servidor';
+                setFetchError(errorMsg);
             } finally {
                 if (isInitial && chats.length === 0) {
                     setLoadingChats(false);
@@ -85,13 +96,13 @@ export const ChatList = ({ onSelectChat }: ChatListProps) => {
 
         // Silent background refresh every 30 seconds (no spinner)
         const interval = setInterval(() => fetchChats(false), 30000);
-        
+
         // Silent refresh when window gains focus
         const handleFocus = () => {
             fetchChats(false);
         };
         window.addEventListener('focus', handleFocus);
-        
+
         return () => {
             clearInterval(interval);
             window.removeEventListener('focus', handleFocus);
@@ -254,42 +265,66 @@ export const ChatList = ({ onSelectChat }: ChatListProps) => {
     ];
 
     return (
-        <div className="w-full bg-white dark:bg-[#111b21] flex flex-col h-full transition-colors">
-            {/* Header with title and icons */}
-            <div className="h-14 px-4 flex items-center justify-between bg-gray-100 dark:bg-[#202c33] transition-colors">
-                <h1 className="text-xl font-medium text-gray-800 dark:text-white">Chats</h1>
-                <div className="flex items-center gap-3">
-                    <button 
+        <div className="w-full bg-white dark:bg-[#111b21] flex flex-col h-full transition-colors duration-200">
+            {/* Header with title and icons - Responsive spacing and layout */}
+            <header
+                className="flex items-center justify-between bg-gray-100 dark:bg-[#202c33] transition-colors duration-200"
+                style={{
+                    padding: 'clamp(0.75rem, 1vw, 1.25rem)',
+                    minHeight: 'clamp(3rem, 8vw, 3.5rem)',
+                    gap: 'clamp(0.5rem, 2vw, 1rem)'
+                }}
+            >
+                <h1 className="text-base sm:text-lg md:text-xl font-semibold text-gray-800 dark:text-white flex-shrink-0">
+                    Chats
+                </h1>
+
+                {/* Controls - Responsive icon buttons with touch-friendly sizing */}
+                <div className="flex items-center gap-1 sm:gap-2">
+                    <button
                         onClick={() => setShowNewChat(!showNewChat)}
-                        className="p-2 text-[#aebac1] hover:bg-[#374248] rounded-full transition-colors"
+                        className="p-2 sm:p-2.5 text-[#aebac1] hover:bg-[#374248] rounded-full transition-colors duration-150 active:scale-95 touch-highlight"
                         title="Nuevo chat"
+                        aria-label="Nuevo chat"
+                        aria-expanded={showNewChat}
                     >
-                        <MessageSquarePlus className="w-5 h-5" />
+                        <MessageSquarePlus className="w-5 h-5 sm:w-6 sm:h-6" />
                     </button>
+
                     <div className="relative">
-                        <button 
+                        <button
                             onClick={() => setShowFilterMenu(!showFilterMenu)}
                             className={clsx(
-                                "p-2 rounded-full transition-colors relative",
+                                "p-2 sm:p-2.5 rounded-full transition-colors duration-150 active:scale-95 touch-highlight relative",
                                 showFilterMenu || hasActiveFilters
                                     ? "text-[#00a884] bg-[#374248]"
                                     : "text-[#aebac1] hover:bg-[#374248]"
                             )}
                             title="Filtros avanzados"
+                            aria-label="Filtros avanzados"
+                            aria-expanded={showFilterMenu}
+                            aria-controls="filter-menu"
                         >
-                            <Filter className="w-5 h-5" />
+                            <Filter className="w-5 h-5 sm:w-6 sm:h-6" />
                             {hasActiveFilters && (
-                                <span className="absolute top-1 right-1 w-2 h-2 bg-[#00a884] rounded-full"></span>
+                                <span
+                                    className="absolute top-1 right-1 w-2 h-2 bg-[#00a884] rounded-full animate-pulse"
+                                    aria-hidden="true"
+                                />
                             )}
                         </button>
 
-                        {/* Filter dropdown menu */}
+                        {/* Filter dropdown menu - Responsive positioning */}
                         {showFilterMenu && (
-                            <div className="absolute right-0 top-12 bg-[#233138] rounded-lg shadow-lg border border-[#374248] py-2 min-w-[220px] z-50">
+                            <div
+                                id="filter-menu"
+                                className="absolute right-0 top-full sm:top-14 bg-[#233138] rounded-lg shadow-lg border border-[#374248] py-2 w-screen sm:min-w-[240px] sm:max-w-xs md:max-w-sm z-50 mt-1"
+                                role="menu"
+                            >
                                 {/* Header */}
                                 <div className="px-4 py-2 flex items-center justify-between border-b border-[#374248]">
                                     <span className="text-sm font-medium text-[#e9edef]">Filtros avanzados</span>
-                                    <button 
+                                    <button
                                         onClick={() => setShowFilterMenu(false)}
                                         className="p-1 hover:bg-[#374248] rounded text-[#8696a0]"
                                     >
@@ -401,27 +436,35 @@ export const ChatList = ({ onSelectChat }: ChatListProps) => {
                             </div>
                         )}
                     </div>
+
                     <div className="relative">
-                        <button 
+                        <button
                             onClick={() => setShowSettingsMenu(!showSettingsMenu)}
                             className={clsx(
-                                "p-2 rounded-full transition-colors",
+                                "p-2 sm:p-2.5 rounded-full transition-colors duration-150 active:scale-95 touch-highlight",
                                 showSettingsMenu
                                     ? "text-[#00a884] bg-[#374248]"
                                     : "text-[#aebac1] hover:bg-[#374248]"
                             )}
                             title="Configuración"
+                            aria-label="Menú de configuración"
+                            aria-expanded={showSettingsMenu}
+                            aria-controls="settings-menu"
                         >
-                            <MoreVertical className="w-5 h-5" />
+                            <MoreVertical className="w-5 h-5 sm:w-6 sm:h-6" />
                         </button>
 
-                        {/* Settings dropdown menu */}
+                        {/* Settings dropdown menu - Responsive positioning */}
                         {showSettingsMenu && (
-                            <div className="absolute right-0 top-12 bg-[#233138] rounded-lg shadow-lg border border-[#374248] py-2 min-w-[220px] z-50">
+                            <div
+                                id="settings-menu"
+                                className="absolute right-0 top-full sm:top-14 bg-[#233138] rounded-lg shadow-lg border border-[#374248] py-2 w-screen sm:min-w-[280px] sm:max-w-xs md:max-w-sm z-50 mt-1"
+                                role="menu"
+                            >
                                 {/* Header */}
                                 <div className="px-4 py-2 flex items-center justify-between border-b border-[#374248]">
                                     <span className="text-sm font-medium text-[#e9edef]">Configuración</span>
-                                    <button 
+                                    <button
                                         onClick={() => setShowSettingsMenu(false)}
                                         className="p-1 hover:bg-[#374248] rounded text-[#8696a0]"
                                     >
@@ -535,11 +578,17 @@ export const ChatList = ({ onSelectChat }: ChatListProps) => {
 
                                 {/* Logout option */}
                                 <button
-                                    onClick={() => {
+                                    onClick={async () => {
                                         setShowSettingsMenu(false);
-                                        if (confirm('¿Cerrar sesión de WhatsApp?')) {
-                                            // TODO: Implement logout
-                                            window.location.reload();
+                                        if (confirm('¿Cerrar sesión de WhatsApp? Esto desconectará el bot por completo y requerirá escanear un nuevo QR.')) {
+                                            try {
+                                                const { statusApi } = await import('../../api/client');
+                                                await statusApi.logout();
+                                                window.location.reload();
+                                            } catch (err: any) {
+                                                console.error('Logout failed:', err);
+                                                alert('Error al cerrar sesión: ' + (err.message || 'Error desconocido'));
+                                            }
                                         }
                                     }}
                                     className="w-full px-4 py-2.5 flex items-center gap-3 text-red-400 hover:bg-[#374248] transition-colors"
@@ -551,34 +600,49 @@ export const ChatList = ({ onSelectChat }: ChatListProps) => {
                         )}
                     </div>
                 </div>
-            </div>
+            </header>
 
-            {/* Search bar */}
-            <div className="px-3 py-2 bg-white dark:bg-[#111b21] transition-colors">
+            {/* Search bar - Responsive padding and font size */}
+            <div
+                className="bg-white dark:bg-[#111b21] transition-colors duration-200 border-b border-gray-200 dark:border-[#202c33]"
+                style={{
+                    padding: 'clamp(0.5rem, 1vw, 0.75rem)',
+                }}
+            >
                 <div className="relative">
-                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-[#8696a0]" />
+                    <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-[#8696a0] pointer-events-none" />
                     <input
                         type="text"
                         placeholder="Buscar o iniciar uno nuevo"
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-10 pr-4 py-2 bg-gray-100 dark:bg-[#202c33] text-gray-800 dark:text-[#d1d7db] placeholder-gray-400 dark:placeholder-[#8696a0] border-none rounded-lg text-sm focus:outline-none transition-colors"
+                        className="w-full pl-10 pr-4 py-2.5 sm:py-2 bg-gray-100 dark:bg-[#202c33] text-gray-800 dark:text-[#d1d7db] placeholder-gray-400 dark:placeholder-[#8696a0] border-none rounded-lg text-sm sm:text-base focus:outline-none focus:ring-2 focus:ring-[#00a884] focus:ring-offset-0 transition-all duration-150"
+                        aria-label="Buscar chats"
                     />
                 </div>
             </div>
 
-            {/* Filter pills - WhatsApp Web style */}
-            <div className="px-3 py-2 flex gap-2 overflow-x-auto scrollbar-hide bg-white dark:bg-[#111b21] transition-colors">
+            {/* Filter pills - WhatsApp Web style - Responsive horizontal scroll */}
+            <div
+                className="flex gap-2 overflow-x-auto scrollbar-hide bg-white dark:bg-[#111b21] transition-colors duration-200 border-b border-gray-200 dark:border-[#202c33]"
+                style={{
+                    padding: 'clamp(0.5rem, 1vw, 0.75rem)',
+                }}
+                role="tablist"
+                aria-label="Filtros de chat"
+            >
                 {filterButtons.map((filter) => (
                     <button
                         key={filter.id}
                         onClick={() => handleQuickFilterChange(filter.id)}
                         className={clsx(
-                            'px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap transition-colors',
+                            'px-3 sm:px-4 py-1.5 sm:py-2 rounded-full text-xs sm:text-sm font-medium whitespace-nowrap transition-all duration-150 active:scale-95 touch-highlight',
                             quickFilter === filter.id
-                                ? 'bg-[#00a884] text-white dark:text-[#111b21]'
+                                ? 'bg-[#00a884] text-white dark:text-[#111b21] shadow-sm'
                                 : 'bg-gray-100 dark:bg-[#202c33] text-gray-600 dark:text-[#8696a0] hover:bg-gray-200 dark:hover:bg-[#2a3942]'
                         )}
+                        role="tab"
+                        aria-selected={quickFilter === filter.id}
                     >
                         {filter.label}
                     </button>
@@ -608,11 +672,64 @@ export const ChatList = ({ onSelectChat }: ChatListProps) => {
                 </div>
             )}
 
+            {/* Error banner */}
+            {fetchError && (
+                <div className="px-3 py-2 bg-red-50 dark:bg-red-900/20 border-b border-red-200 dark:border-red-800">
+                    <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs text-red-700 dark:text-red-400 flex-1">
+                            ⚠️ {fetchError}
+                        </p>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={async () => {
+                                    if (confirm('¿Deseas intentar un reinicio forzado de la sesión? Usa esto si los chats no cargan tras varios intentos.')) {
+                                        try {
+                                            const { statusApi } = await import('../../api/client');
+                                            await statusApi.logout();
+                                            window.location.reload();
+                                        } catch (err) {
+                                            window.location.reload();
+                                        }
+                                    }
+                                }}
+                                className="px-2 py-1 text-xs bg-amber-600 hover:bg-amber-700 text-white rounded transition-colors"
+                            >
+                                Reiniciar Sesión
+                            </button>
+                            <button
+                                onClick={() => window.location.reload()}
+                                className="px-2 py-1 text-xs bg-red-600 hover:bg-red-700 text-white rounded transition-colors"
+                            >
+                                Reintentar
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            )}
+
             {/* Chat list */}
             <div className="flex-1 overflow-y-auto bg-white dark:bg-transparent transition-colors">
                 {isLoadingChats ? (
                     <div className="flex items-center justify-center py-8">
                         <LoadingSpinner />
+                    </div>
+                ) : fetchError && filteredChats.length === 0 ? (
+                    <div className="flex flex-col items-center justify-center py-12 px-4 text-center">
+                        <div className="w-16 h-16 bg-red-100 dark:bg-red-900/30 rounded-full flex items-center justify-center mb-4">
+                            <MessageSquarePlus className="w-8 h-8 text-red-500 dark:text-red-400" />
+                        </div>
+                        <h3 className="text-lg font-medium text-gray-800 dark:text-gray-200 mb-2">
+                            No se pudieron cargar los chats
+                        </h3>
+                        <p className="text-sm text-gray-500 dark:text-gray-400 mb-4 max-w-xs">
+                            {fetchError}
+                        </p>
+                        <button
+                            onClick={() => window.location.reload()}
+                            className="px-4 py-2 bg-[#00a884] hover:bg-[#06cf9c] text-white rounded-lg transition-colors font-medium text-sm"
+                        >
+                            Reintentar ahora
+                        </button>
                     </div>
                 ) : filteredChats.length === 0 ? (
                     <div className="flex flex-col items-center justify-center py-8 text-gray-500 dark:text-[#8696a0]">
@@ -622,23 +739,31 @@ export const ChatList = ({ onSelectChat }: ChatListProps) => {
                         </p>
                     </div>
                 ) : (
-                    <div>
-                        {filteredChats.map((chat: Chat) => (
-                            <ChatListItem
-                            key={chat.jid}
-                            chat={chat}
-                            isActive={activeChat === chat.jid}
-                            onClick={() => handleChatClick(chat.jid)}
-                            />
-                        ))}
-                    </div>
+                    <>
+                        {/* Last update indicator */}
+                        <div className="px-4 py-2 text-center border-b border-gray-100 dark:border-[#222d34]">
+                            <p className="text-xs text-gray-400 dark:text-[#8696a0]">
+                                Actualizado {new Date(lastFetchTime).toLocaleTimeString('es-DO', { hour: '2-digit', minute: '2-digit' })}
+                            </p>
+                        </div>
+                        <div>
+                            {filteredChats.map((chat: Chat) => (
+                                <ChatListItem
+                                    key={chat.jid}
+                                    chat={chat}
+                                    isActive={activeChat === chat.jid}
+                                    onClick={() => handleChatClick(chat.jid)}
+                                />
+                            ))}
+                        </div>
+                    </>
                 )}
             </div>
 
             {/* Settings Panel */}
-            <SettingsPanel 
-                isOpen={showSettingsPanel} 
-                onClose={() => setShowSettingsPanel(false)} 
+            <SettingsPanel
+                isOpen={showSettingsPanel}
+                onClose={() => setShowSettingsPanel(false)}
             />
         </div>
     );

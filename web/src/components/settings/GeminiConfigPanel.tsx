@@ -33,17 +33,18 @@ interface GeminiConfigPanelProps {
 type ConnectionStatus = 'unknown' | 'checking' | 'connected' | 'error' | 'not_configured';
 
 export const GeminiConfigPanel = ({ onConfigured, compact = false }: GeminiConfigPanelProps) => {
-    const [apiKey, setApiKey] = useState('');
-    const [showApiKey, setShowApiKey] = useState(false);
+    const [geminiKey, setGeminiKey] = useState('');
+    const [showGeminiKey, setShowGeminiKey] = useState(false);
+
     const [saveStatus, setSaveStatus] = useState<'idle' | 'saving' | 'saved' | 'error'>('idle');
     const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus>('unknown');
     const [testResponse, setTestResponse] = useState<string | null>(null);
-    const [showInstructions, setShowInstructions] = useState(true);
+    const [showInstructions, setShowInstructions] = useState(false); // Default closed to save space
     const [copied, setCopied] = useState(false);
     const [errorMessage, setErrorMessage] = useState<string | null>(null);
     const [isConfigured, setIsConfigured] = useState(false);
 
-    // Cargar estado inicial
+    // Cargar estado inicial del backend
     useEffect(() => {
         checkCurrentConfig();
     }, []);
@@ -51,55 +52,47 @@ export const GeminiConfigPanel = ({ onConfigured, compact = false }: GeminiConfi
     const checkCurrentConfig = async () => {
         try {
             const response = await configApi.getAiApiKey();
-            if (response.data?.configured) {
-                setIsConfigured(true);
-                setConnectionStatus('connected');
-                // Mostrar solo los ultimos 4 caracteres
-                if (response.data.maskedKey) {
-                    setApiKey(response.data.maskedKey);
+            if (response.data?.success) {
+                const config = response.data.aiConfig;
+                setIsConfigured(config.hasGeminiKey || config.hasGroqKey);
+
+                if (config.hasGeminiKey) setConnectionStatus('connected');
+                else if (config.hasGroqKey) setConnectionStatus('connected');
+                else setConnectionStatus('not_configured');
+
+                // Update settings form
+                // setPreferredProvider(config.preferredProvider || 'gemini');
+                // setEnableFailover(config.enableFailover ?? true);
+
+                // We don't get actual keys back, just masked or boolean presence
+                // So we only update if we have a masked key to show, otherwise keep empty
+                if (response.data.maskedKey && response.data.source === 'runtime') {
+                    // This is tricky because maskedKey is just one of them. 
+                    // Ideally we don't overwrite user input if they are typing.
                 }
-            } else {
-                setConnectionStatus('not_configured');
             }
         } catch (error: any) {
             console.error('Error checking config:', error);
-            // Si es error 404, el endpoint no existe o el backend no está corriendo
             if (error.response?.status === 404) {
-                setErrorMessage('Backend no disponible. Asegúrate de que el servidor esté corriendo (npm run server:dev)');
+                setErrorMessage('Backend no disponible.');
             }
-            setConnectionStatus('not_configured');
         }
     };
 
     const handleSaveApiKey = async () => {
-        if (!apiKey.trim() || apiKey.includes('***')) return;
+        if (!geminiKey.trim() || geminiKey.includes('***')) return;
 
         setSaveStatus('saving');
         setErrorMessage(null);
 
         try {
-            // Save to backend
-            const response = await configApi.setAiApiKey(apiKey.trim());
+            const response = await configApi.setAiApiKey(geminiKey.trim());
 
             if (response.data?.success) {
                 setSaveStatus('saved');
                 setIsConfigured(true);
                 setConnectionStatus('connected');
                 localStorage.setItem('gemini_api_key_configured', 'true');
-
-                // Also save to Firebase for cross-device sync (import needed)
-                try {
-                    const { auth } = await import('../../lib/firebase');
-                    const { userConfigService } = await import('../../services/firestore/userConfigService');
-
-                    if (auth.currentUser) {
-                        await userConfigService.updateGeminiApiKey(auth.currentUser.uid, apiKey.trim());
-                        console.log('✅ API key also saved to Firebase');
-                    }
-                } catch (fbError) {
-                    console.warn('Could not save to Firebase:', fbError);
-                    // Don't fail the whole operation if Firebase sync fails
-                }
 
                 setTimeout(() => setSaveStatus('idle'), 2000);
                 onConfigured?.();
@@ -211,10 +204,10 @@ export const GeminiConfigPanel = ({ onConfigured, compact = false }: GeminiConfi
                     </label>
                     <div className="relative">
                         <input
-                            type={showApiKey ? 'text' : 'password'}
-                            value={apiKey}
+                            type={showGeminiKey ? 'text' : 'password'}
+                            value={geminiKey}
                             onChange={(e) => {
-                                setApiKey(e.target.value);
+                                setGeminiKey(e.target.value);
                                 setErrorMessage(null);
                             }}
                             placeholder="AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
@@ -222,11 +215,11 @@ export const GeminiConfigPanel = ({ onConfigured, compact = false }: GeminiConfi
                         />
                         <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
                             <button
-                                onClick={() => setShowApiKey(!showApiKey)}
+                                onClick={() => setShowGeminiKey(!showGeminiKey)}
                                 className="p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
-                                title={showApiKey ? 'Ocultar' : 'Mostrar'}
+                                title={showGeminiKey ? 'Ocultar' : 'Mostrar'}
                             >
-                                {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                {showGeminiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                             </button>
                         </div>
                     </div>
@@ -240,7 +233,7 @@ export const GeminiConfigPanel = ({ onConfigured, compact = false }: GeminiConfi
                 {/* Save button */}
                 <button
                     onClick={handleSaveApiKey}
-                    disabled={!apiKey.trim() || apiKey.includes('***') || saveStatus === 'saving'}
+                    disabled={!geminiKey.trim() || geminiKey.includes('***') || saveStatus === 'saving'}
                     className={clsx(
                         "w-full py-2 rounded-lg text-white font-medium transition-colors disabled:opacity-50 flex items-center justify-center gap-2",
                         saveStatus === 'saved'
@@ -499,10 +492,10 @@ export const GeminiConfigPanel = ({ onConfigured, compact = false }: GeminiConfi
                 <div className="relative">
                     <Key className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-[#8696a0]" />
                     <input
-                        type={showApiKey ? 'text' : 'password'}
-                        value={apiKey}
+                        type={showGeminiKey ? 'text' : 'password'}
+                        value={geminiKey}
                         onChange={(e) => {
-                            setApiKey(e.target.value);
+                            setGeminiKey(e.target.value);
                             setErrorMessage(null);
                         }}
                         placeholder="AIzaSyXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
@@ -510,11 +503,11 @@ export const GeminiConfigPanel = ({ onConfigured, compact = false }: GeminiConfi
                     />
                     <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
                         <button
-                            onClick={() => setShowApiKey(!showApiKey)}
+                            onClick={() => setShowGeminiKey(!showGeminiKey)}
                             className="p-2 text-[#8696a0] hover:text-[#e9edef] transition-colors"
-                            title={showApiKey ? 'Ocultar' : 'Mostrar'}
+                            title={showGeminiKey ? 'Ocultar' : 'Mostrar'}
                         >
-                            {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                            {showGeminiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                         </button>
                     </div>
                 </div>
@@ -522,7 +515,7 @@ export const GeminiConfigPanel = ({ onConfigured, compact = false }: GeminiConfi
                 {/* Save Button */}
                 <button
                     onClick={handleSaveApiKey}
-                    disabled={!apiKey.trim() || apiKey.includes('***') || saveStatus === 'saving'}
+                    disabled={!geminiKey.trim() || geminiKey.includes('***') || saveStatus === 'saving'}
                     className={clsx(
                         "w-full p-3 rounded-lg font-medium transition-all flex items-center justify-center gap-2",
                         saveStatus === 'saved'

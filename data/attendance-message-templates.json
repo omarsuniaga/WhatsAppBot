@@ -1,0 +1,29 @@
+{
+  "updatedAt": "2026-02-11T04:32:05.672Z",
+  "templates": {
+    "teacher_reminder": {
+      "action": "teacher_reminder",
+      "name": "Recordatorio Docente",
+      "usage": "Card: Reportes Pendientes de Hoy",
+      "template": "*RECORDATORIO DE ASISTENCIA*\n\nHola *{{teacher_name}}*, no hemos recibido el reporte de asistencia de la clase *{{class_name}}* para la fecha *{{date}}*. Por favor complete el registro a la brevedad.",
+      "variables": [
+        "teacher_name",
+        "class_name",
+        "date"
+      ],
+      "updatedAt": "2026-02-11T04:32:05.671Z"
+    },
+    "parent_absence_alert": {
+      "action": "parent_absence_alert",
+      "name": "Alerta a Representante",
+      "usage": "Card: Alumnos en Riesgo",
+      "template": "*ALERTA DE ASISTENCIA*\n\nEstimado representante de *{{student_name}}*, le informamos que el alumno ha acumulado *{{absences}} inasistencias* en el periodo actual. Por favor, comuníquese con la administración.",
+      "variables": [
+        "student_name",
+        "absences"
+      ],
+      "updatedAt": "2026-02-11T04:32:05.671Z"
+    }
+  },
+  "history": []
+}

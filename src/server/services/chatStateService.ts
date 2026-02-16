@@ -13,6 +13,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { writeFileSyncAtomic } from '../utils/atomicWrite';
 import { toStableKey } from '../utils/jidUtils';
 
 interface ChatState {
@@ -81,7 +82,7 @@ class ChatStateService {
                 states: Object.fromEntries(this.states)
             };
 
-            fs.writeFileSync(this.dataFile, JSON.stringify(store, null, 2));
+            writeFileSyncAtomic(this.dataFile, JSON.stringify(store, null, 2));
         } catch (error) {
             console.error('[ChatState] Error saving to disk:', error);
         }

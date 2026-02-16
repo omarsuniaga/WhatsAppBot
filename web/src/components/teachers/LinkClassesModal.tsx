@@ -45,10 +45,11 @@ export const LinkClassesModal = ({ teacher, onClose, onSuccess }: LinkClassesMod
 
         return classes.filter(c => {
             // Skip if already assigned to THIS teacher (using UID)
-            if (c.teacherId === teacher.id) return false;
+            const teacherUid = teacher.uid || teacher.id;
+            if (c.teacherId === teacherUid) return false;
 
             // Check if assigned to another UID (strict check, maybe careful here?)
-            // if (c.teacherId && c.teacherId.length > 20 && c.teacherId !== teacher.id) return false;
+            // if (c.teacherId && c.teacherId.length > 20 && c.teacherId !== teacherUid) return false;
 
             // const className = normalize(c.name || '');
             const classTeacherName = normalize(c.profesor_nombre || '');
@@ -99,11 +100,18 @@ export const LinkClassesModal = ({ teacher, onClose, onSuccess }: LinkClassesMod
     const handleSave = async () => {
         if (selectedIds.size === 0) return;
 
+        // Use uid for teacherId (priority) - critical for teacher app to see classes
+        const teacherUid = teacher.uid || teacher.id!;
+
+        if (!teacher.uid) {
+            console.warn('Warning: Teacher does not have uid. Using document ID as fallback:', teacher.id);
+        }
+
         try {
             setSaving(true);
             await clasesService.assignTeacherToClasses(
                 Array.from(selectedIds),
-                teacher.id!, // Assuming teacher has ID/UID
+                teacherUid, // Use uid for teacherId - teacher app queries by this
                 teacher.name
             );
             onSuccess();
@@ -178,7 +186,7 @@ export const LinkClassesModal = ({ teacher, onClose, onSuccess }: LinkClassesMod
                                                 <span>{clase.instrument || clase.instrumento || 'Sin instrumento'}</span>
                                             </div>
                                         </div>
-                                        {clase.teacherId === teacher.id && (
+                                        {clase.teacherId === (teacher.uid || teacher.id) && (
                                             <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded">Ya asignada</span>
                                         )}
                                     </div>

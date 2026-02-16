@@ -10,6 +10,9 @@ import { normalizeRawJid, toStableKey, debugJid, isValidJid, isGroupJid } from '
 import { IdentityService, SenderResolution } from './identityService';
 import { ContactsRepository } from '../persistence/ContactsRepository';
 import { StudentsRepository } from '../persistence/StudentsRepository';
+import { MessageProcessor } from '../utils/messageProcessor';
+import { WhatsAppRateLimiter } from '../utils/whatsappRateLimiter';
+import { getErrorMessage } from '../utils/errorUtils';
 
 export type ConnectionStatus = 'disconnected' | 'connecting' | 'connected';
 
@@ -41,31 +44,41 @@ class BotService {
     // Anti-loop and rate limiting
     private sentMessages: Map<string, SentMessageTracker> = new Map();
     private lastMessageTime: Map<string, number> = new Map();
-    private processingMessages: Set<string> = new Set(); // Prevent concurrent processing
 
     // Metrics
     private metrics: MetricsService;
-    
+
     // Contact store for display names
     private contactStore: ContactStoreService;
-    
+
     // Chat state for unread tracking
     private chatState: ChatStateService;
-    
+
     // Identity resolution service
     private identityService: IdentityService;
 
     // Trigger service for keyword activation
     private triggerService: TriggerService;
 
+    // Message Processor for thread-safe message handling
+    private messageProcessor: MessageProcessor;
+
+    // Rate limiter for WhatsApp message sending
+    private rateLimiter: WhatsAppRateLimiter;
+
+    // Store interval references for proper shutdown
+    private trackerCleanupInterval: ReturnType<typeof setInterval> | null = null;
+
     private constructor() {
+        this.messageProcessor = new MessageProcessor();
         this.metrics = MetricsService.getInstance();
         this.contactStore = ContactStoreService.getInstance();
         this.chatState = ChatStateService.getInstance();
         this.identityService = IdentityService.getInstance();
         this.triggerService = TriggerService.getInstance();
-        // Clean up old tracking data periodically
-        setInterval(() => this.cleanupTrackers(), 60000);
+        this.rateLimiter = WhatsAppRateLimiter.getInstance();
+        // Clean up old tracking data periodically (store reference for shutdown)
+        this.trackerCleanupInterval = setInterval(() => this.cleanupTrackers(), 60000);
     }
 
     /**
@@ -88,14 +101,6 @@ class BotService {
         }
     }
 
-    /**
-     * Validate JID format
-     */
-    private isValidJid(jid: string): boolean {
-        if (!jid || typeof jid !== 'string') return false;
-        // WhatsApp JID format: number@s.whatsapp.net or number@g.us (groups)
-        return /^\d+@(s\.whatsapp\.net|g\.us)$/.test(jid);
-    }
 
     /**
      * Sanitize message text
@@ -128,7 +133,7 @@ class BotService {
         }
 
         // Skip invalid JIDs
-        if (!this.isValidJid(jid)) {
+        if (!isValidJid(jid)) {
             console.warn(`[BotService] Invalid JID format: ${jid}`);
             return { skip: true, reason: 'invalid_jid' };
         }
@@ -144,11 +149,8 @@ class BotService {
             }
         }
 
-        // Check if already processing this chat
-        if (this.processingMessages.has(jid)) {
-            console.log(`[BotService] Already processing message for ${jid}, queuing`);
-            return { skip: true, reason: 'already_processing' };
-        }
+        // Note: MessageProcessor now handles concurrent processing
+        // This check is no longer needed here
 
         return { skip: false };
     }
@@ -194,13 +196,9 @@ class BotService {
             debug: options.debug || false,
         });
 
-        // Initialize AI via BotOrchestrator (handles all agents internally)
+        // Initialize AI via BotOrchestrator (singleton constructor handles env bootstrapping)
         const orchestrator = BotOrchestrator.getInstance();
-        const apiKey = process.env.GEMINI_API_KEY;
-        if (apiKey) {
-            orchestrator.initGemini(apiKey);
-            console.log('AI Agents initialized via BotOrchestrator');
-        } else {
+        if (!process.env.GEMINI_API_KEY) {
             console.warn('GEMINI_API_KEY not found. AI features will be disabled.');
         }
 
@@ -243,6 +241,13 @@ class BotService {
             this.io?.emit('connection:status', this.connectionStatus);
             this.io?.emit('ready');
 
+            // Get connection health for monitoring
+            if (this.bot && typeof this.bot.getConnectionHealth === 'function') {
+                const health = this.bot.getConnectionHealth();
+                console.log('[BotService] Connection health:', health);
+                this.io?.emit('connection:health', health);
+            }
+
             // Record connection metric
             this.metrics.connectionStatus('connected');
 
@@ -256,14 +261,52 @@ class BotService {
             }
         });
 
+        this.bot.on('max_reconnect_reached', (data: any) => {
+            this.connectionStatus = 'disconnected';
+            this.io?.emit('connection:status', this.connectionStatus);
+            this.io?.emit('session:max_reconnect', {
+                ...data,
+                message: 'Max reconnection attempts reached. Use the reconnect button to try again.',
+                timestamp: Date.now()
+            });
+            this.metrics.connectionStatus('disconnected');
+            this.metrics.error('max_reconnect', `Attempts: ${data.attempts}, status: ${data.lastStatusCode}`);
+        });
+
         this.bot.on('auth_failure', (error: any) => {
             this.connectionStatus = 'disconnected';
-            this.io?.emit('auth_failure', { error: String(error) });
+
+            // Enhanced error handling for MAC/corruption errors
+            const errorMessage = String(error).toLowerCase();
+            const isCorruptionError = errorMessage.includes('bad mac') ||
+                errorMessage.includes('corrupt') ||
+                errorMessage.includes('mac verification') ||
+                errorMessage.includes('libsignal');
+
+            if (isCorruptionError) {
+                console.error('[BotService] Session corruption detected in auth_failure:', error);
+                // Emit specific event for corruption
+                this.io?.emit('session:corruption', {
+                    error: String(error),
+                    type: 'mac_error',
+                    timestamp: Date.now()
+                });
+            }
+
+            this.io?.emit('auth_failure', {
+                error: String(error),
+                isCorruptionError,
+                timestamp: Date.now()
+            });
             this.io?.emit('connection:status', this.connectionStatus);
 
             // Record connection failure metric
             this.metrics.connectionStatus('disconnected');
             this.metrics.error('auth', String(error));
+
+            if (isCorruptionError) {
+                this.metrics.error('session_corruption', String(error));
+            }
         });
 
         this.bot.on('message', async (message: any) => {
@@ -274,42 +317,42 @@ class BotService {
             const rawMessageText = message.body;
             const messageTimestamp = message.messageTimestamp || Math.floor(Date.now() / 1000);
             const pushName = message.pushName;
-            
+
             // CRITICAL: Normalize JIDs using centralized jidUtils
             // This prevents bugs like "@lidid" and ensures consistent lookups
             const normalizedJid = normalizeRawJid(rawRemoteJid);
             const stableKey = toStableKey(rawRemoteJid);
-            
+
             // Debug: Log JID normalization to catch issues
             if (!isValidJid(rawRemoteJid)) {
                 console.error(`[BotService] INVALID JID DETECTED: "${rawRemoteJid}"`);
             }
             debugJid('message', rawRemoteJid);
-            
+
             // Use normalized JID for all operations
             const chatJid = normalizedJid || rawFromJid;
-            
+
             // Store pushName for contact display names (existing ContactStoreService)
             if (pushName && !isFromMe && stableKey) {
                 console.log(`[BotService] Storing pushName="${pushName}" for stableKey=${stableKey}`);
                 this.contactStore.setDisplayName(rawRemoteJid, pushName, 'pushName');
                 this.chatState.setDisplayName(rawRemoteJid, pushName);
             }
-            
+
             // ==========================================
             // IDENTITY RESOLUTION: Link message to Contact & Students
             // ==========================================
             let identityResolution: SenderResolution | null = null;
             let studentNames: string[] = [];
-            
+
             // Only resolve identity for non-group, inbound messages
             if (!isFromMe && !isGroupJid(rawRemoteJid) && normalizedJid) {
                 try {
                     identityResolution = await this.identityService.resolveSender(normalizedJid);
-                    
+
                     if (identityResolution.isKnown && identityResolution.contactId) {
                         console.log(`[BotService] Identity resolved: contactId=${identityResolution.contactId}, studentIds=[${identityResolution.studentIds.join(',')}]`);
-                        
+
                         // Update ContactsRepo displayName if pushName exists and is different/empty
                         if (pushName && identityResolution.contact) {
                             const currentDisplayName = identityResolution.contact.displayName;
@@ -325,7 +368,7 @@ class BotService {
                                 }
                             }
                         }
-                        
+
                         // Fetch student names for enriched events
                         if (identityResolution.studentIds.length > 0) {
                             try {
@@ -350,12 +393,12 @@ class BotService {
                     console.warn(`[BotService] Identity resolution failed:`, identityErr.message);
                 }
             }
-            
+
             // Track unread count for inbound messages
             if (!isFromMe && stableKey) {
                 this.chatState.onInboundMessage(rawRemoteJid, messageTimestamp, false);
             }
-            
+
             // Get display name for frontend (includes fallback logic)
             const senderDisplayName = this.contactStore.getDisplayNameWithFallback(
                 rawRemoteJid,
@@ -404,80 +447,31 @@ class BotService {
                 return;
             }
 
-            // Mark as processing to prevent concurrent handling
-            this.processingMessages.add(chatJid);
-
-            // Record message received metric
-            const isGroup = isGroupJid(rawRemoteJid);
-            this.metrics.messageReceived(chatJid, messageText.length, isGroup);
-
-            // Check if message should activate the bot based on triggers
-            const triggerCheck = this.triggerService.shouldActivateBot(messageText, chatJid);
-            if (!triggerCheck.activate) {
-                console.log(`[BotService] Message skipped - listener disabled or no trigger matched`);
-                this.processingMessages.delete(chatJid);
-                return;
-            }
-
-            // Log matched triggers if any
-            if (triggerCheck.triggers.length > 0) {
-                console.log(`[BotService] Triggers matched: ${triggerCheck.triggers.map(t => t.keyword).join(', ')}`);
-                // Emit trigger event to frontend
-                this.io?.emit('trigger:matched', {
-                    jid: chatJid,
-                    message: messageText,
-                    triggers: triggerCheck.triggers.map(t => ({ id: t.id, keyword: t.keyword, category: t.category }))
-                });
-            }
-
+            // Use MessageProcessor for thread-safe message processing
             try {
-                // Use resolved display name for bot responses
-                const customerName = senderDisplayName || 'Cliente';
+                const processResult = await this.messageProcessor.processMessage(chatJid, {
+                    id: message.key?.id || `msg-${Date.now()}`,
+                    messageText,
+                    isFromMe,
+                    rawRemoteJid,
+                    context: {
+                        senderDisplayName,
+                        pushName,
+                        messageTimestamp
+                    },
+                    botService: this // Pass botService instance for internal logic
+                });
 
-                const orchestrator = BotOrchestrator.getInstance();
-                const response = await orchestrator.processMessage(chatJid, messageText, isFromMe, customerName);
-
-                if (response && response.response) {
-                    // Show typing indicator
-                    await this.sendPresenceUpdate(chatJid, 'composing').catch(() => {});
-
-                    // Add a small delay to simulate typing
-                    const config = orchestrator.getConfig();
-                    if (config.settings.typingIndicator) {
-                        await new Promise(resolve => setTimeout(resolve, config.settings.typingDelayMs));
-                    }
-
-                    // Rate limit check before sending
-                    await this.waitForRateLimit(chatJid);
-
-                    // Send the response
-                    await this.sendText(chatJid, response.response);
-
-                    // Track sent message for anti-loop
-                    this.sentMessages.set(chatJid, {
-                        lastSentAt: Date.now(),
-                        messageHash: this.hashMessage(chatJid, response.response)
-                    });
-
-                    // Emit bot response event for frontend
-                    this.io?.emit('bot:response', {
-                        jid: chatJid,
-                        response: response.response,
-                        source: response.source,
-                        confidence: response.confidence
-                    });
-
-                    await this.sendPresenceUpdate(chatJid, 'paused').catch(() => {});
-
-                    console.log(`[BotService] Response sent to ${chatJid} (source: ${response.source})`);
+                if (processResult?.skipped) {
+                    console.log(`[BotService] Message skipped via MessageProcessor: ${processResult.reason}`);
+                    return;
                 }
-            } catch (error: any) {
-                console.error(`[BotService] Error processing message from ${chatJid}:`, error.message || error);
-                this.metrics.error('message_processing', error.message || String(error), chatJid);
-                await this.sendPresenceUpdate(chatJid, 'paused').catch(() => {});
-            } finally {
-                // Always remove from processing set
-                this.processingMessages.delete(chatJid);
+
+                console.log(`[BotService] Message processed successfully via MessageProcessor`);
+            } catch (error: unknown) {
+                console.error(`[BotService] MessageProcessor error for ${chatJid}:`, getErrorMessage(error) || error);
+                this.metrics.error('message_processing', getErrorMessage(error) || String(error), chatJid);
+                await this.sendPresenceUpdate(chatJid, 'paused').catch(() => { });
             }
         });
 
@@ -490,7 +484,7 @@ class BotService {
             const contactsCount = payload.contacts?.length || 0;
             const messagesCount = payload.messages?.length || 0;
             console.log(`[BotService] History Sync: ${chatsCount} chats, ${contactsCount} contacts, ${messagesCount} messages`);
-            
+
             this.io?.emit('sync:history', {
                 chatsCount,
                 contactsCount,
@@ -548,24 +542,24 @@ class BotService {
         const seenJids = new Set<string>();
         const fs = require('fs');
         const sessionDir = './web-bot_sessions';
-        
+
         try {
             if (!fs.existsSync(sessionDir)) return contacts;
-            
+
             const files = fs.readdirSync(sessionDir);
             const sessionFiles = files.filter((f: string) => f.startsWith('session-') && f.endsWith('.json'));
-            
+
             for (const file of sessionFiles) {
                 // Extract phone number from filename like "session-18093195369.0.json"
                 const match = file.match(/session-(\d+)\./);
                 if (match) {
                     const phoneNumber = match[1];
                     const jid = `${phoneNumber}@s.whatsapp.net`;
-                    
+
                     // Avoid duplicates
                     if (seenJids.has(jid)) continue;
                     seenJids.add(jid);
-                    
+
                     contacts.push({
                         jid,
                         name: phoneNumber,
@@ -576,7 +570,7 @@ class BotService {
         } catch (error) {
             console.error('Error reading session contacts:', error);
         }
-        
+
         return contacts;
     }
 
@@ -597,13 +591,13 @@ class BotService {
 
         try {
             console.log('Forcing contact sync...');
-            
+
             // Try to trigger contact sync
             const socket = this.getSocket();
             if (socket) {
                 // Send a presence update which might trigger contact sync
                 await socket.sendPresenceUpdate('available');
-                
+
                 // Wait a bit for contacts to sync
                 await new Promise(resolve => setTimeout(resolve, 2000));
             }
@@ -618,12 +612,12 @@ class BotService {
                     const phoneNumber = contact.id?.split('@')[0];
                     return {
                         jid: contact.id,
-                        name: contact.name || 
-                              contact.pushName || 
-                              contact.verifiedName || 
-                              contact.formattedName || 
-                              contact.notify || 
-                              `+${phoneNumber}`,
+                        name: contact.name ||
+                            contact.pushName ||
+                            contact.verifiedName ||
+                            contact.formattedName ||
+                            contact.notify ||
+                            `+${phoneNumber}`,
                         pushName: contact.pushName,
                         verifiedName: contact.verifiedName,
                         isBusiness: contact.isBusiness || false,
@@ -634,62 +628,50 @@ class BotService {
             console.log(`Refreshed ${enhancedContacts.length} contacts from WhatsApp`);
             return enhancedContacts;
 
-        } catch (error: any) {
-            console.error('Error refreshing contacts:', error.message);
+        } catch (error: unknown) {
+            console.error('Error refreshing contacts:', getErrorMessage(error));
             return [];
         }
     }
 
-    async fetchMessagesFromWA(jid: string, count: number): Promise<any[]> {
+    async fetchMessagesFromWA(jid: string, count: number, beforeMessageId?: string): Promise<any[]> {
         if (!this.bot) {
             console.log('Bot not initialized');
             return [];
         }
-        
+
         try {
-            console.log(`Attempting to fetch ${count} messages for ${jid}`);
-            // Use BaileysClass method to fetch message history
-            const messages = await this.bot.fetchMessageHistory(jid, count);
+            console.log(`Attempting to fetch ${count} messages for ${jid}${beforeMessageId ? ` before ${beforeMessageId}` : ''}`);
+
+            // 1. Try to use Baileys fetchMessageHistory with pagination support
+            const messages = await this.bot.fetchMessageHistory(jid, count, beforeMessageId);
             console.log(`fetchMessageHistory returned ${messages.length} messages for ${jid}`);
-            
-            // If no messages, try some additional approaches
+
+            // 2. If no messages, try enhanced sync methods
             if (messages.length === 0) {
-                console.log(`No messages from fetchMessageHistory, trying alternative methods for ${jid}`);
-                
-                // Try to trigger sync by checking if we can access the socket directly
-                const socket = this.getSocket();
-                if (socket) {
-                    try {
-                        // Try to send a presence update to trigger sync
-                        await socket.sendPresenceUpdate('available', jid);
-                        console.log(`Sent presence update to trigger sync for ${jid}`);
-                        
-                        // Wait a moment and try again
-                        await new Promise(resolve => setTimeout(resolve, 1000));
-                        const retryMessages = await this.bot.fetchMessageHistory(jid, count);
-                        if (retryMessages.length > 0) {
-                            console.log(`Retry fetched ${retryMessages.length} messages for ${jid}`);
-                            return retryMessages;
-                        }
-                    } catch (presenceError) {
-                        console.warn(`Presence update failed for ${jid}:`, presenceError);
-                    }
+                console.log(`No messages from fetchMessageHistory, trying enhanced sync for ${jid}`);
+
+                const syncMessages = await this.enhancedMessageSync(jid, count);
+                if (syncMessages.length > 0) {
+                    console.log(`Enhanced sync fetched ${syncMessages.length} messages for ${jid}`);
+                    return syncMessages;
                 }
-                
-                // Final fallback to store
-                const storeMessages = this.bot.getMessagesFromStore(jid, count);
-                console.log(`Fallback store returned ${storeMessages.length} messages for ${jid}`);
-                return storeMessages;
             }
-            
-            return messages;
-        } catch (error: any) {
-            console.error(`Failed to fetch messages for ${jid}:`, error.message);
-            // Fallback to store
+
+            // 3. Process and normalize messages
+            const processedMessages = this.processMessagesHistory(messages, jid);
+            console.log(`Processed ${processedMessages.length} messages for ${jid}`);
+
+            return processedMessages;
+        } catch (error: unknown) {
+            console.error(`Failed to fetch messages for ${jid}:`, getErrorMessage(error));
+
+            // Fallback to store with enhanced processing
             try {
                 const storeMessages = this.bot.getMessagesFromStore(jid, count);
-                console.log(`Error fallback store returned ${storeMessages.length} messages for ${jid}`);
-                return storeMessages;
+                const processedStoreMessages = this.processMessagesHistory(storeMessages, jid);
+                console.log(`Error fallback processed ${processedStoreMessages.length} messages for ${jid}`);
+                return processedStoreMessages;
             } catch (storeError) {
                 console.error(`Store fallback also failed for ${jid}:`, storeError);
                 return [];
@@ -697,60 +679,337 @@ class BotService {
         }
     }
 
+    /**
+     * Enhanced message synchronization using multiple Baileys approaches
+     */
+    private async enhancedMessageSync(jid: string, count: number): Promise<any[]> {
+        const socket = this.getSocket();
+        if (!socket) return [];
+
+        try {
+            // Method 1: Try chatModify to trigger history sync
+            try {
+                const canonicalJid = `${jid.split('@')[0]}@s.whatsapp.net`;
+                // Generate a random ID for the message key to avoid "Incomplete key" error
+                const randomId = Math.random().toString(36).substring(2, 12).toUpperCase();
+                await socket.chatModify(
+                    { lastMessages: [{ key: { remoteJid: canonicalJid, fromMe: true, id: randomId }, messageTimestamp: Math.floor(Date.now() / 1000) }], clear: false },
+                    canonicalJid
+                );
+                console.log(`ChatModify sent for ${canonicalJid} with ID ${randomId}`);
+
+                // Wait for sync to complete
+                await new Promise(resolve => setTimeout(resolve, 3000));
+
+                // Try fetching again after sync
+                if (!this.bot) throw new Error('Bot not available');
+                const retryMessages = await this.bot.fetchMessageHistory(jid, count);
+                if (retryMessages.length > 0) {
+                    return retryMessages;
+                }
+            } catch (chatModifyError: any) {
+                console.warn(`ChatModify failed for ${jid}:`, chatModifyError.message);
+            }
+
+            // Method 2: Try presence update to trigger sync
+            try {
+                await socket.sendPresenceUpdate('available', jid);
+                console.log(`Presence update sent for ${jid}`);
+
+                await new Promise(resolve => setTimeout(resolve, 2000));
+
+                if (!this.bot) throw new Error('Bot not available');
+                const presenceMessages = await this.bot.fetchMessageHistory(jid, count);
+                if (presenceMessages.length > 0) {
+                    return presenceMessages;
+                }
+            } catch (presenceError: any) {
+                console.warn(`Presence update failed for ${jid}:`, presenceError.message);
+            }
+
+            // Method 3: Try to load messages directly if available
+            try {
+                if (socket.loadMessages) {
+                    const loadedMessages = await socket.loadMessages(jid, count);
+                    if (loadedMessages && loadedMessages.length > 0) {
+                        console.log(`Loaded ${loadedMessages.length} messages using loadMessages`);
+                        return loadedMessages;
+                    }
+                }
+            } catch (loadError) {
+                console.warn(`loadMessages failed for ${jid}:`, loadError.message);
+            }
+
+            return [];
+        } catch (error: unknown) {
+            console.error(`Enhanced sync failed for ${jid}:`, getErrorMessage(error));
+            return [];
+        }
+    }
+
+    /**
+     * Process and normalize message history for consistent frontend consumption
+     */
+    private processMessagesHistory(messages: any[], jid: string): any[] {
+        if (!Array.isArray(messages)) return [];
+
+        return messages
+            .filter(msg => msg && msg.key && msg.message) // Filter valid messages
+            .map(msg => {
+                // Extract message content using the same logic as the message handler
+                const messageText = this.extractMessageText(msg.message);
+                const messageType = this.extractMessageType(msg.message);
+
+                return {
+                    id: msg.key?.id,
+                    from: msg.key?.remoteJid || jid,
+                    fromMe: msg.key?.fromMe || false,
+                    body: messageText,
+                    type: messageType,
+                    timestamp: msg.messageTimestamp || Date.now(),
+                    pushName: msg.pushName,
+                    // Enhanced metadata for different message types
+                    mediaUrl: this.extractMediaUrl(msg.message),
+                    fileName: this.extractFileName(msg.message),
+                    fileSize: this.extractFileSize(msg.message),
+                    duration: this.extractDuration(msg.message),
+                    location: this.extractLocation(msg.message),
+                    contactInfo: this.extractContactInfo(msg.message),
+                    // Group message metadata
+                    participant: msg.key?.participant,
+                    // Message status and ack
+                    status: msg.status || 0,
+                    ack: msg.ack || 0,
+                    // Raw message for advanced processing
+                    raw: msg
+                };
+            })
+            .sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0)); // Sort by timestamp ascending
+    }
+
+    /**
+     * Extract message text content
+     */
+    private extractMessageText(message: any): string {
+        if (!message) return '';
+
+        return message.conversation ||
+            message.extendedTextMessage?.text ||
+            message.imageMessage?.caption ||
+            message.videoMessage?.caption ||
+            message.documentMessage?.caption ||
+            message.locationMessage?.name ||
+            message.contactMessage?.vcard?.name ||
+            message.buttonsResponseMessage?.selectedDisplayText ||
+            message.listResponseMessage?.title ||
+            '';
+    }
+
+    /**
+     * Extract message type
+     */
+    private extractMessageType(message: any): string {
+        if (!message) return 'unknown';
+
+        if (message.conversation || message.extendedTextMessage) return 'text';
+        if (message.imageMessage) return 'image';
+        if (message.videoMessage) return 'video';
+        if (message.audioMessage) return 'audio';
+        if (message.stickerMessage) return 'sticker';
+        if (message.documentMessage) return 'document';
+        if (message.locationMessage) return 'location';
+        if (message.contactMessage) return 'contact';
+        if (message.buttonsResponseMessage) return 'button_response';
+        if (message.listResponseMessage) return 'list_response';
+        if (message.pollMessage) return 'poll';
+
+        return 'unknown';
+    }
+
+    /**
+     * Extract media URL for media messages
+     */
+    private extractMediaUrl(message: any): string | null {
+        if (!message) return null;
+
+        const mediaMessage = message.imageMessage ||
+            message.videoMessage ||
+            message.documentMessage ||
+            message.stickerMessage ||
+            message.audioMessage;
+
+        return mediaMessage?.url || null;
+    }
+
+    /**
+     * Extract filename for document messages
+     */
+    private extractFileName(message: any): string | null {
+        if (!message?.documentMessage) return null;
+        return message.documentMessage.fileName || null;
+    }
+
+    /**
+     * Extract file size for media messages
+     */
+    private extractFileSize(message: any): number | null {
+        if (!message) return null;
+
+        const mediaMessage = message.imageMessage ||
+            message.videoMessage ||
+            message.documentMessage ||
+            message.audioMessage;
+
+        return mediaMessage?.fileLength || null;
+    }
+
+    /**
+     * Extract duration for audio messages
+     */
+    private extractDuration(message: any): number | null {
+        if (!message?.audioMessage) return null;
+        return message.audioMessage.seconds || null;
+    }
+
+    /**
+     * Extract location data
+     */
+    private extractLocation(message: any): { lat: number; lng: number; name?: string } | null {
+        if (!message?.locationMessage) return null;
+
+        return {
+            lat: message.locationMessage.degreesLatitude,
+            lng: message.locationMessage.degreesLongitude,
+            name: message.locationMessage.name
+        };
+    }
+
+    /**
+     * Extract contact information
+     */
+    private extractContactInfo(message: any): { name: string; vcard: string } | null {
+        if (!message?.contactMessage) return null;
+
+        return {
+            name: message.contactMessage.displayName,
+            vcard: message.contactMessage.vcard
+        };
+    }
+
     async getProfilePictureUrl(jid: string): Promise<string | null> {
         if (!this.bot) return null;
         return this.bot.getProfilePictureUrl(jid);
     }
 
-    // Message sending methods
+    // ==========================================
+    // Rate-Limited Message Sending
+    // ==========================================
+
+    /**
+     * Enforce rate limiting before sending a message.
+     * Waits for a slot or throws if daily limit exceeded.
+     */
+    private async enforceRateLimit(jid: string, messageType: 'text' | 'media' = 'text'): Promise<void> {
+        const result = await this.rateLimiter.waitForSendSlot(jid, messageType);
+
+        if (!result.allowed) {
+            const errorMsg = `Rate limit: ${result.reason} for ${jid} (waited ${result.waitedMs}ms)`;
+            console.warn(`[BotService] ${errorMsg}`);
+            this.metrics.error('rate_limit', errorMsg, jid);
+            throw new Error(errorMsg);
+        }
+
+        if (result.waitedMs > 0) {
+            console.log(`[BotService] Rate limiter: waited ${result.waitedMs}ms before sending to ${jid}`);
+        }
+    }
+
+    /**
+     * Record a successfully sent message in the rate limiter.
+     */
+    private recordSentMessage(jid: string, messageType: 'text' | 'media' = 'text'): void {
+        this.rateLimiter.recordSentMessage(jid, messageType);
+    }
+
+    // Message sending methods (all rate-limited)
     async sendText(number: string, message: string): Promise<any> {
         if (!this.bot) throw new Error('Bot not initialized');
-        return this.bot.sendText(number, message);
+        await this.enforceRateLimit(number, 'text');
+        const result = await this.bot.sendText(number, message);
+        this.recordSentMessage(number, 'text');
+        return result;
     }
 
     async sendMedia(number: string, mediaUrl: string, caption: string = ''): Promise<any> {
         if (!this.bot) throw new Error('Bot not initialized');
-        return this.bot.sendMedia(number, mediaUrl, caption);
+        await this.enforceRateLimit(number, 'media');
+        const result = await this.bot.sendMedia(number, mediaUrl, caption);
+        this.recordSentMessage(number, 'media');
+        return result;
     }
 
     async sendImage(number: string, filePath: string, caption: string = ''): Promise<any> {
         if (!this.bot) throw new Error('Bot not initialized');
-        return this.bot.sendImage(number, filePath, caption);
+        await this.enforceRateLimit(number, 'media');
+        const result = await this.bot.sendImage(number, filePath, caption);
+        this.recordSentMessage(number, 'media');
+        return result;
     }
 
     async sendVideo(number: string, filePath: string, caption: string = ''): Promise<any> {
         if (!this.bot) throw new Error('Bot not initialized');
-        return this.bot.sendVideo(number, filePath, caption);
+        await this.enforceRateLimit(number, 'media');
+        const result = await this.bot.sendVideo(number, filePath, caption);
+        this.recordSentMessage(number, 'media');
+        return result;
     }
 
     async sendAudio(number: string, audioUrl: string): Promise<any> {
         if (!this.bot) throw new Error('Bot not initialized');
-        return this.bot.sendAudio(number, audioUrl);
+        await this.enforceRateLimit(number, 'media');
+        const result = await this.bot.sendAudio(number, audioUrl);
+        this.recordSentMessage(number, 'media');
+        return result;
     }
 
     async sendFile(number: string, filePath: string): Promise<any> {
         if (!this.bot) throw new Error('Bot not initialized');
-        return this.bot.sendFile(number, filePath);
+        await this.enforceRateLimit(number, 'media');
+        const result = await this.bot.sendFile(number, filePath);
+        this.recordSentMessage(number, 'media');
+        return result;
     }
 
     async sendPoll(number: string, text: string, options: string[]): Promise<any> {
         if (!this.bot) throw new Error('Bot not initialized');
-        return this.bot.sendPoll(number, text, { options });
+        await this.enforceRateLimit(number, 'text');
+        const result = await this.bot.sendPoll(number, text, { options });
+        this.recordSentMessage(number, 'text');
+        return result;
     }
 
     async sendLocation(remoteJid: string, latitude: string, longitude: string): Promise<any> {
         if (!this.bot) throw new Error('Bot not initialized');
-        return this.bot.sendLocation(remoteJid, latitude, longitude);
+        await this.enforceRateLimit(remoteJid, 'text');
+        const result = await this.bot.sendLocation(remoteJid, latitude, longitude);
+        this.recordSentMessage(remoteJid, 'text');
+        return result;
     }
 
     async sendContact(remoteJid: string, contactNumber: string, displayName: string): Promise<any> {
         if (!this.bot) throw new Error('Bot not initialized');
-        return this.bot.sendContact(remoteJid, contactNumber, displayName);
+        await this.enforceRateLimit(remoteJid, 'text');
+        const result = await this.bot.sendContact(remoteJid, contactNumber, displayName);
+        this.recordSentMessage(remoteJid, 'text');
+        return result;
     }
 
     async sendSticker(remoteJid: string, url: string, stickerOptions: any = {}): Promise<any> {
         if (!this.bot) throw new Error('Bot not initialized');
-        return this.bot.sendSticker(remoteJid, url, stickerOptions);
+        await this.enforceRateLimit(remoteJid, 'media');
+        const result = await this.bot.sendSticker(remoteJid, url, stickerOptions);
+        this.recordSentMessage(remoteJid, 'media');
+        return result;
     }
 
     async sendPresenceUpdate(remoteJid: string, presence: string): Promise<void> {
@@ -767,7 +1026,7 @@ class BotService {
      */
     async markMessagesAsRead(jid: string, messageIds?: string[]): Promise<boolean> {
         if (!this.bot) throw new Error('Bot not initialized');
-        
+
         // Convert message IDs to keys if provided
         let messageKeys: any[] | undefined;
         if (messageIds && messageIds.length > 0) {
@@ -777,7 +1036,7 @@ class BotService {
                 fromMe: false
             }));
         }
-        
+
         return this.bot.markMessagesAsRead(jid, messageKeys);
     }
 
@@ -824,8 +1083,8 @@ class BotService {
 
         try {
             return await socket.groupMetadata(groupJid);
-        } catch (error: any) {
-            console.error(`Failed to get group metadata for ${groupJid}:`, error.message);
+        } catch (error: unknown) {
+            console.error(`Failed to get group metadata for ${groupJid}:`, getErrorMessage(error));
             throw error;
         }
     }
@@ -840,8 +1099,8 @@ class BotService {
 
         try {
             return await socket.groupCreate(name, participants);
-        } catch (error: any) {
-            console.error('Failed to create group:', error.message);
+        } catch (error: unknown) {
+            console.error('Failed to create group:', getErrorMessage(error));
             throw error;
         }
     }
@@ -856,8 +1115,8 @@ class BotService {
 
         try {
             await socket.groupUpdateSubject(groupJid, subject);
-        } catch (error: any) {
-            console.error('Failed to update group subject:', error.message);
+        } catch (error: unknown) {
+            console.error('Failed to update group subject:', getErrorMessage(error));
             throw error;
         }
     }
@@ -872,8 +1131,8 @@ class BotService {
 
         try {
             await socket.groupUpdateDescription(groupJid, description);
-        } catch (error: any) {
-            console.error('Failed to update group description:', error.message);
+        } catch (error: unknown) {
+            console.error('Failed to update group description:', getErrorMessage(error));
             throw error;
         }
     }
@@ -888,8 +1147,8 @@ class BotService {
 
         try {
             return await socket.groupParticipantsUpdate(groupJid, participants, 'add');
-        } catch (error: any) {
-            console.error('Failed to add participants:', error.message);
+        } catch (error: unknown) {
+            console.error('Failed to add participants:', getErrorMessage(error));
             throw error;
         }
     }
@@ -904,8 +1163,8 @@ class BotService {
 
         try {
             return await socket.groupParticipantsUpdate(groupJid, participants, 'remove');
-        } catch (error: any) {
-            console.error('Failed to remove participants:', error.message);
+        } catch (error: unknown) {
+            console.error('Failed to remove participants:', getErrorMessage(error));
             throw error;
         }
     }
@@ -920,8 +1179,8 @@ class BotService {
 
         try {
             return await socket.groupParticipantsUpdate(groupJid, participants, 'promote');
-        } catch (error: any) {
-            console.error('Failed to promote participants:', error.message);
+        } catch (error: unknown) {
+            console.error('Failed to promote participants:', getErrorMessage(error));
             throw error;
         }
     }
@@ -936,8 +1195,8 @@ class BotService {
 
         try {
             return await socket.groupParticipantsUpdate(groupJid, participants, 'demote');
-        } catch (error: any) {
-            console.error('Failed to demote participants:', error.message);
+        } catch (error: unknown) {
+            console.error('Failed to demote participants:', getErrorMessage(error));
             throw error;
         }
     }
@@ -952,8 +1211,8 @@ class BotService {
 
         try {
             await socket.groupLeave(groupJid);
-        } catch (error: any) {
-            console.error('Failed to leave group:', error.message);
+        } catch (error: unknown) {
+            console.error('Failed to leave group:', getErrorMessage(error));
             throw error;
         }
     }
@@ -968,8 +1227,8 @@ class BotService {
 
         try {
             return await socket.groupInviteCode(groupJid);
-        } catch (error: any) {
-            console.error('Failed to get invite code:', error.message);
+        } catch (error: unknown) {
+            console.error('Failed to get invite code:', getErrorMessage(error));
             throw error;
         }
     }
@@ -984,8 +1243,8 @@ class BotService {
 
         try {
             return await socket.groupRevokeInvite(groupJid);
-        } catch (error: any) {
-            console.error('Failed to revoke invite code:', error.message);
+        } catch (error: unknown) {
+            console.error('Failed to revoke invite code:', getErrorMessage(error));
             throw error;
         }
     }
@@ -1000,8 +1259,8 @@ class BotService {
 
         try {
             return await socket.groupAcceptInvite(inviteCode);
-        } catch (error: any) {
-            console.error('Failed to join group:', error.message);
+        } catch (error: unknown) {
+            console.error('Failed to join group:', getErrorMessage(error));
             throw error;
         }
     }
@@ -1016,8 +1275,8 @@ class BotService {
 
         try {
             await socket.groupSettingUpdate(groupJid, setting);
-        } catch (error: any) {
-            console.error('Failed to update group settings:', error.message);
+        } catch (error: unknown) {
+            console.error('Failed to update group settings:', getErrorMessage(error));
             throw error;
         }
     }
@@ -1042,6 +1301,74 @@ class BotService {
      */
     markChatAsRead(jid: string): void {
         this.chatState.markAsRead(jid);
+    }
+
+    /**
+     * Get connection health information
+     */
+    getConnectionHealth(): any {
+        if (this.bot && typeof this.bot.getConnectionHealth === 'function') {
+            return this.bot.getConnectionHealth();
+        }
+        return {
+            isReady: !!this.bot && this.connectionStatus === 'connected',
+            connectionStatus: this.connectionStatus,
+            hasBot: !!this.bot,
+            error: null
+        };
+    }
+
+    /**
+     * Force session reset for corruption recovery
+     */
+    async forceSessionReset(): Promise<void> {
+        if (this.bot && typeof this.bot.forceSessionReset === 'function') {
+            await this.bot.forceSessionReset();
+            this.io?.emit('session:reset', { timestamp: Date.now() });
+        }
+    }
+
+    /**
+     * Gracefully disconnect WhatsApp without clearing session.
+     * Session files are preserved — reconnecting won't require a new QR scan.
+     */
+    async disconnect(): Promise<void> {
+        if (!this.bot) throw new Error('Bot not initialized');
+        this.connectionStatus = 'disconnected';
+        this.currentQR = null;
+        await this.bot.gracefulDisconnect();
+        this.io?.emit('connection:status', this.connectionStatus);
+        this.io?.emit('session:disconnected', { intentional: true, timestamp: Date.now() });
+        this.metrics.connectionStatus('disconnected');
+    }
+
+    /**
+     * Manually reconnect WhatsApp after a disconnect or after max attempts were reached.
+     */
+    async reconnect(): Promise<void> {
+        if (!this.bot) throw new Error('Bot not initialized');
+        this.connectionStatus = 'connecting';
+        this.io?.emit('connection:status', this.connectionStatus);
+        await this.bot.reconnect();
+    }
+
+    /**
+     * Get rate limiter statistics for monitoring
+     */
+    getRateLimiterStats() {
+        return this.rateLimiter.getStats();
+    }
+
+    /**
+     * Shutdown: clean up all intervals and services to prevent memory leaks
+     */
+    shutdown(): void {
+        if (this.trackerCleanupInterval) {
+            clearInterval(this.trackerCleanupInterval);
+            this.trackerCleanupInterval = null;
+        }
+        this.rateLimiter.shutdown();
+        console.log('[BotService] Shutdown complete — intervals cleared');
     }
 }
 

@@ -11,6 +11,7 @@
 
 import * as fs from 'fs';
 import * as path from 'path';
+import { writeFileSyncAtomic } from '../utils/atomicWrite';
 import { toStableKey, extractPhoneNumber as extractPhone, isGroupJid } from '../utils/jidUtils';
 
 interface ContactEntry {
@@ -86,7 +87,7 @@ class ContactStoreService {
                 contacts: Object.fromEntries(this.contacts)
             };
             
-            fs.writeFileSync(this.dataFile, JSON.stringify(store, null, 2));
+            writeFileSyncAtomic(this.dataFile, JSON.stringify(store, null, 2));
         } catch (error) {
             console.error('[ContactStore] Error saving contacts:', error);
         }

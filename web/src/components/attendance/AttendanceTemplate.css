@@ -1,0 +1,301 @@
+﻿@page {
+    size: letter;
+    margin: 15mm;
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+.attendance-template-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    font-family: Arial, Helvetica, sans-serif;
+    color: #000;
+    background: #fff;
+}
+
+.attendance-sheet {
+    width: 210mm;
+    margin: 0 auto;
+    padding: 15mm;
+    background: #fff;
+    font-size: 11px;
+}
+
+.header {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    margin-bottom: 6px;
+}
+
+.header-logo {
+    width: 90px;
+    flex-shrink: 0;
+}
+
+.header-logo img {
+    width: 90px;
+    height: auto;
+}
+
+.header-title {
+    flex: 1;
+    text-align: center;
+    padding: 0 10px;
+}
+
+.header-title h1 {
+    font-size: 14px;
+    font-weight: 700;
+    line-height: 1.3;
+    text-transform: uppercase;
+}
+
+.header-date {
+    width: 140px;
+    flex-shrink: 0;
+    font-size: 11px;
+    font-weight: 700;
+}
+
+.header-date .fecha-line {
+    margin-bottom: 8px;
+}
+
+.header-date .entrada-line {
+    margin-bottom: 4px;
+}
+
+.entrada-box {
+    display: inline-block;
+    width: 100px;
+    border-bottom: 2px solid #000;
+    height: 20px;
+    vertical-align: bottom;
+}
+
+.blue-bar-table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-bottom: 8px;
+}
+
+.blue-bar-table td {
+    background: #1a2744;
+    height: 20px;
+}
+
+.info-main-row {
+    display: flex;
+    gap: 0;
+    margin-bottom: 10px;
+}
+
+.info-fields-col {
+    flex: 1;
+    padding-right: 10px;
+}
+
+.info-fields-col p {
+    margin-bottom: 5px;
+    font-size: 10.5px;
+}
+
+.info-totals-col {
+    width: 180px;
+    padding-right: 10px;
+}
+
+.info-totals-col p {
+    margin-bottom: 5px;
+    font-size: 10.5px;
+}
+
+.info-totals-col p span {
+    display: inline-block;
+    min-width: 70px;
+    border-bottom: 1.5px solid #000;
+    text-align: center;
+}
+
+.info-legend-col {
+    width: 130px;
+}
+
+.info-legend-col p {
+    margin-bottom: 3px;
+    font-size: 10.5px;
+    font-weight: 700;
+}
+
+.attendance-table-wrapper {
+    display: flex;
+    gap: 0;
+    margin-bottom: 6px;
+}
+
+.attendance-table {
+    border-collapse: collapse;
+    font-size: 10.5px;
+    width: 100%;
+}
+
+.attendance-table-wrapper--cols-1 .attendance-table {
+    width: 100%;
+}
+
+.attendance-table-wrapper--cols-2 .attendance-table {
+    width: 50%;
+}
+
+.attendance-table-wrapper--cols-3 .attendance-table {
+    width: 33.3333%;
+}
+
+.attendance-table-wrapper--cols-4 .attendance-table {
+    width: 25%;
+}
+
+.attendance-table th {
+    background: #1a2744;
+    color: #fff;
+    font-weight: 700;
+    padding: 5px 6px;
+    text-align: center;
+    border: 1px solid #1a2744;
+    font-size: 10.5px;
+}
+
+.attendance-table td {
+    border: 1px solid #999;
+    padding: 4px 6px;
+    text-align: center;
+    height: 22px;
+}
+
+.attendance-table td:first-child {
+    width: 30px;
+    font-weight: 700;
+}
+
+.attendance-table td:nth-child(2) {
+    text-align: left;
+    width: auto;
+}
+
+.attendance-table td:last-child {
+    width: 45px;
+}
+
+.instructions {
+    font-size: 9px;
+    line-height: 1.4;
+    margin-bottom: 16px;
+}
+
+.section-header {
+    background: #1a2744;
+    color: #fff;
+    font-weight: 700;
+    font-size: 13px;
+    padding: 8px 12px;
+    text-align: center;
+}
+
+.section-header-obs {
+    background: #1a2744;
+    color: #fff;
+    font-weight: 700;
+    font-size: 13px;
+    padding: 6px 12px;
+    text-align: center;
+    line-height: 1.3;
+}
+
+.section-header-obs small {
+    font-size: 11px;
+    font-weight: 400;
+    display: block;
+}
+
+.lined-area {
+    border: 1px solid #999;
+    border-top: none;
+}
+
+.lined-row {
+    border-bottom: 1px solid #999;
+    min-height: 26px;
+    width: 100%;
+    padding: 4px 8px;
+    font-size: 10px;
+    line-height: 1.2;
+}
+
+.lined-row:last-child {
+    border-bottom: none;
+}
+
+.lined-row--text {
+    white-space: pre-wrap;
+}
+
+.signatures {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 30px;
+    padding: 0 20px;
+}
+
+.signature-block {
+    text-align: center;
+    width: 200px;
+}
+
+.signature-line {
+    border-top: 1.5px solid #000;
+    padding-top: 4px;
+    font-size: 10.5px;
+}
+
+.page-break {
+    break-after: page;
+    page-break-after: always;
+}
+
+@media print {
+    .attendance-screen-content {
+        display: none !important;
+    }
+
+    #attendance-print-root {
+        display: block !important;
+    }
+
+    .attendance-template-container {
+        position: static;
+        display: block;
+        width: 100%;
+    }
+
+    .attendance-sheet {
+        width: 100%;
+        margin: 0;
+        padding: 0;
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+
+    .attendance-table th,
+    .blue-bar-table td,
+    .section-header,
+    .section-header-obs {
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+    }
+}

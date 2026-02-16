@@ -101,7 +101,7 @@ export const SetupWizard = ({ onComplete, onSkip }: SetupWizardProps) => {
 
                 case 'gemini':
                     if (geminiKey) {
-                        await aiApi.updateConfig(geminiKey);
+                        await aiApi.updateConfig({ geminiApiKey: geminiKey });
                         localStorage.setItem('GEMINI_API_KEY', geminiKey);
                     }
                     setCurrentStep('admin');

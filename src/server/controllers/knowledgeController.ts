@@ -1,10 +1,12 @@
-/**
+﻿/**
  * Knowledge Base Controller
- * API endpoints para gestión de FAQ y respuestas automáticas
+ * API endpoints para gestiÃ³n de FAQ y respuestas automÃ¡ticas
  */
 
 import { Request, Response } from 'express';
+import Logger from '../services/loggerService';
 import { KnowledgeBaseService } from '../services/knowledgeBaseService';
+import { getErrorMessage } from '../utils/errorUtils';
 
 const knowledgeService = KnowledgeBaseService.getInstance();
 
@@ -16,8 +18,8 @@ export const getConfig = async (req: Request, res: Response): Promise<void> => {
     try {
         const config = knowledgeService.getConfig();
         res.json({ success: true, data: config });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -25,8 +27,8 @@ export const updateConfig = async (req: Request, res: Response): Promise<void> =
     try {
         const config = knowledgeService.updateConfig(req.body);
         res.json({ success: true, data: config });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -41,9 +43,9 @@ export const getCategories = async (req: Request, res: Response): Promise<void> 
             ? knowledgeService.getAllCategories()
             : knowledgeService.getCategories();
         res.json({ success: true, data: categories });
-    } catch (error: any) {
-        console.error('[KnowledgeController] getCategories error:', error);
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        Logger.error('[KnowledgeController] getCategories error:', error);
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -65,8 +67,8 @@ export const addCategory = async (req: Request, res: Response): Promise<void> =>
         });
 
         res.json({ success: true, data: category });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -81,8 +83,8 @@ export const updateCategory = async (req: Request, res: Response): Promise<void>
         }
 
         res.json({ success: true, data: category });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -97,8 +99,8 @@ export const deleteCategory = async (req: Request, res: Response): Promise<void>
         }
 
         res.json({ success: true });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -121,9 +123,9 @@ export const getFaqs = async (req: Request, res: Response): Promise<void> => {
         }
 
         res.json({ success: true, data: faqs });
-    } catch (error: any) {
-        console.error('[KnowledgeController] getFaqs error:', error);
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        Logger.error('[KnowledgeController] getFaqs error:', error);
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -138,8 +140,8 @@ export const getFaq = async (req: Request, res: Response): Promise<void> => {
         }
 
         res.json({ success: true, data: faq });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -172,8 +174,8 @@ export const addFaq = async (req: Request, res: Response): Promise<void> => {
         });
 
         res.json({ success: true, data: faq });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -188,8 +190,8 @@ export const updateFaq = async (req: Request, res: Response): Promise<void> => {
         }
 
         res.json({ success: true, data: faq });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -204,8 +206,8 @@ export const deleteFaq = async (req: Request, res: Response): Promise<void> => {
         }
 
         res.json({ success: true });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -220,8 +222,8 @@ export const approveFaq = async (req: Request, res: Response): Promise<void> => 
         }
 
         res.json({ success: true, data: faq });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -244,8 +246,8 @@ export const searchFaqs = async (req: Request, res: Response): Promise<void> => 
         );
 
         res.json({ success: true, data: results });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -273,8 +275,8 @@ export const learnFromResponse = async (req: Request, res: Response): Promise<vo
         );
 
         res.json({ success: true, data: faq });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -289,8 +291,8 @@ export const generateVariations = async (req: Request, res: Response): Promise<v
 
         const variations = knowledgeService.generateQuestionVariations(question);
         res.json({ success: true, data: variations });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -304,8 +306,8 @@ export const exportData = async (req: Request, res: Response): Promise<void> => 
         res.setHeader('Content-Type', 'application/json');
         res.setHeader('Content-Disposition', 'attachment; filename=knowledge-base.json');
         res.send(json);
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -323,8 +325,8 @@ export const importData = async (req: Request, res: Response): Promise<void> => 
         );
 
         res.json({ success: true, data: result });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -334,13 +336,14 @@ export const importData = async (req: Request, res: Response): Promise<void> => 
 
 export const getStats = async (req: Request, res: Response): Promise<void> => {
     try {
-        console.log('[KnowledgeController] getStats called');
+        Logger.info('[KnowledgeController] getStats called');
         const stats = knowledgeService.getStats();
-        console.log('[KnowledgeController] getStats success:', stats ? 'ok' : 'null');
+        Logger.info('[KnowledgeController] getStats success:', stats ? 'ok' : 'null');
         res.json({ success: true, data: stats });
-    } catch (error: any) {
-        console.error('[KnowledgeController] getStats CRITICAL error:', error);
-        if (error.stack) console.error(error.stack);
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        Logger.error('[KnowledgeController] getStats CRITICAL error:', error);
+        if (error instanceof Error && error.stack) Logger.error(error.stack);
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
+

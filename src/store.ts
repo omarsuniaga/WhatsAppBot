@@ -1,11 +1,25 @@
 import { proto } from '@whiskeysockets/baileys';
-import { existsSync, readFileSync, writeFileSync } from 'fs';
+import { existsSync, readFileSync, writeFileSync, renameSync, unlinkSync, statSync } from 'fs';
+
+// Maximum messages stored per chat to prevent unbounded memory growth
+const MAX_MESSAGES_PER_CHAT = 500;
 
 export default function makeInMemoryStore({ logger }: { logger?: any }) {
     const chats = new Map<string, any>();
     const messages = new Map<string, any>();
     const contacts = new Map<string, any>();
     const state = { connection: 'close' };
+
+    /**
+     * Trim message array to MAX_MESSAGES_PER_CHAT, keeping the most recent ones.
+     */
+    function trimMessages(list: { array: any[] }): void {
+        if (list.array.length > MAX_MESSAGES_PER_CHAT) {
+            // Keep the last MAX_MESSAGES_PER_CHAT messages (most recent)
+            const excess = list.array.length - MAX_MESSAGES_PER_CHAT;
+            list.array.splice(0, excess);
+        }
+    }
 
     function loadMessage(jid: string, id: string) {
         if (messages.has(jid)) {
@@ -26,15 +40,15 @@ export default function makeInMemoryStore({ logger }: { logger?: any }) {
                 contacts.clear();
                 messages.clear();
             }
-            
+
             for (const chat of newChats) {
                 chats.set(chat.id, { ...chats.get(chat.id), ...chat });
             }
-            
+
             for (const contact of newContacts) {
                 contacts.set(contact.id, { ...contacts.get(contact.id), ...contact });
             }
-            
+
             for (const msg of newMessages) {
                 const jid = msg.key.remoteJid;
                 if (!messages.has(jid)) {
@@ -44,11 +58,13 @@ export default function makeInMemoryStore({ logger }: { logger?: any }) {
                 if (!list.array.some((m: any) => m.key.id === msg.key.id)) {
                     list.array.push(msg);
                 }
+                // LRU eviction: trim to MAX_MESSAGES_PER_CHAT
+                trimMessages(list);
             }
-            logger?.info({ 
-                chats: newChats.length, 
-                contacts: newContacts.length, 
-                messages: newMessages.length 
+            logger?.info({
+                chats: newChats.length,
+                contacts: newContacts.length,
+                messages: newMessages.length
             }, 'messaging-history.set handled');
         });
 
@@ -114,27 +130,44 @@ export default function makeInMemoryStore({ logger }: { logger?: any }) {
                     if (!list.array.some((m: any) => m.key.id === msg.key.id)) {
                         list.array.push(msg);
                     }
+                    // LRU eviction: trim to MAX_MESSAGES_PER_CHAT
+                    trimMessages(list);
                 }
             }
         });
-        
+
         // Handle read receipts
         ev.on('messages.update', (updates: any[]) => {
-             for (const { key, update } of updates) {
-                 const jid = key.remoteJid;
-                 if (messages.has(jid)) {
-                     const list = messages.get(jid);
-                     const msg = list.array.find((m: any) => m.key.id === key.id);
-                     if (msg) {
-                         Object.assign(msg, update);
-                     }
-                 }
-             }
+            for (const { key, update } of updates) {
+                const jid = key.remoteJid;
+                if (messages.has(jid)) {
+                    const list = messages.get(jid);
+                    const msg = list.array.find((m: any) => m.key.id === key.id);
+                    if (msg) {
+                        Object.assign(msg, update);
+                    }
+                }
+            }
         });
     }
 
     function readFromFile(path: string) {
         if (existsSync(path)) {
+            // Size check: warn if file is very large
+            try {
+                const stats = statSync(path);
+                const sizeMB = stats.size / (1024 * 1024);
+                if (sizeMB > 50) {
+                    logger?.warn({ path, sizeMB: sizeMB.toFixed(1) }, 'Store file very large, loading may be slow');
+                }
+                if (sizeMB > 200) {
+                    logger?.error({ path, sizeMB: sizeMB.toFixed(1) }, 'Store file exceeds 200MB, skipping load to prevent OOM');
+                    return;
+                }
+            } catch (statErr: any) {
+                logger?.warn({ path, error: statErr.message }, 'Could not stat store file');
+            }
+
             logger?.info({ path }, 'reading from file');
             const jsonStr = readFileSync(path, { encoding: 'utf-8' });
             const json = JSON.parse(jsonStr);
@@ -150,7 +183,12 @@ export default function makeInMemoryStore({ logger }: { logger?: any }) {
             }
             if (json.messages) {
                 for (const jid in json.messages) {
-                    messages.set(jid, { array: json.messages[jid] });
+                    const msgArray = json.messages[jid];
+                    // Apply LRU limit when loading from file
+                    const trimmedArray = Array.isArray(msgArray) && msgArray.length > MAX_MESSAGES_PER_CHAT
+                        ? msgArray.slice(-MAX_MESSAGES_PER_CHAT)
+                        : msgArray;
+                    messages.set(jid, { array: trimmedArray });
                 }
             }
         }
@@ -167,13 +205,21 @@ export default function makeInMemoryStore({ logger }: { logger?: any }) {
         for (const [jid, msgs] of messages) {
             json.messages[jid] = msgs.array;
         }
-        writeFileSync(path, JSON.stringify(json, null, 2));
+        // Atomic write: write to temp file, then rename
+        const tmpPath = `${path}.tmp.${process.pid}`;
+        try {
+            writeFileSync(tmpPath, JSON.stringify(json), 'utf-8');
+            renameSync(tmpPath, path);
+        } catch (err) {
+            try { unlinkSync(tmpPath); } catch (_) { /* ignore */ }
+            throw err;
+        }
     }
 
     return {
         chats,
         contacts,
-        messages: Object.fromEntries(messages), // Expose mostly as object for compatibility
+        messages, // Expose Map directly
         state,
         bind,
         loadMessage,

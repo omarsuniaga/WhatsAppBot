@@ -27,10 +27,15 @@ router.get('/data/classes/today/:date', dataController.getClassesToday);
 router.get('/data/classes/:id', dataController.getClass);
 
 // Attendance
+router.get('/data/attendance/range', dataController.getAttendancesByRange);
 router.get('/data/attendance/today/:date', dataController.getAttendancesToday);
+router.put('/data/attendance/:id', dataController.updateAttendance);
 
 // Absences
 router.get('/data/absences/today/:date', dataController.getAbsencesToday);
+
+// Contacts
+router.get('/data/contacts', dataController.getAllContacts);
 
 // Teachers
 router.get('/data/teachers', dataController.getAllTeachers);
@@ -58,5 +63,15 @@ router.post('/automations/alerts/send-absence', automationController.sendAbsence
 // Scheduled tasks (manual execution)
 router.post('/automations/scheduled/check-pending', automationController.checkPendingJustifications);
 router.post('/automations/scheduled/weekly-report', automationController.generateWeeklyReport);
+
+// ==========================================
+// ATTENDANCE ALERTS CONFIG/STATS/HISTORY
+// Used by AttendanceAlertsPage
+// ==========================================
+router.get('/automation/alerts/config', automationController.getAlertConfig);
+router.put('/automation/alerts/config', automationController.updateAlertConfig);
+router.get('/automation/alerts/stats', automationController.getAlertStats);
+router.get('/automation/alerts/history', automationController.getAlertHistory);
+router.post('/automation/alerts/generate', automationController.generateAlerts);
 
 export default router;

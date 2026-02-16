@@ -2,25 +2,25 @@
   "version": 1,
   "states": {
     "120363044349593574@group": {
-      "unreadCount": 12,
-      "lastMessageAt": 1769701823,
+      "unreadCount": 18,
+      "lastMessageAt": 1770655928,
       "lastReadAt": 1769577647,
-      "displayName": "Rafael Cabrera",
-      "updatedAt": "2026-01-29T15:50:23.462Z"
+      "displayName": "emiliorivera",
+      "updatedAt": "2026-02-09T16:52:07.279Z"
     },
     "120363211756992147@group": {
-      "unreadCount": 0,
-      "lastMessageAt": 1769576285,
+      "unreadCount": 79,
+      "lastMessageAt": 1770655928,
       "lastReadAt": 1769577305,
-      "displayName": "Xue Zheng Rent a House",
-      "updatedAt": "2026-01-28T05:15:05.189Z"
+      "displayName": "💛💙❤️ Jenny 💛💙❤️",
+      "updatedAt": "2026-02-09T16:52:07.526Z"
     },
     "176012239323262@contact": {
-      "unreadCount": 9,
-      "lastMessageAt": 1769536616,
+      "unreadCount": 11,
+      "lastMessageAt": 1770655922,
       "lastReadAt": null,
       "displayName": "Omar Suniaga",
-      "updatedAt": "2026-01-27T17:56:56.084Z"
+      "updatedAt": "2026-02-09T16:52:00.661Z"
     },
     "18097176627@contact": {
       "unreadCount": 12,
@@ -60,6 +60,70 @@
       "lastReadAt": null,
       "displayName": "Thamy",
       "updatedAt": "2026-01-29T15:01:02.951Z"
+    },
+    "2195382604017@contact": {
+      "unreadCount": 6,
+      "lastMessageAt": 1770634461,
+      "lastReadAt": null,
+      "displayName": "Soraida",
+      "updatedAt": "2026-02-09T10:54:21.781Z"
+    },
+    "28759184904363@contact": {
+      "unreadCount": 3,
+      "lastMessageAt": 1770599544,
+      "lastReadAt": null,
+      "displayName": "eriveranunez106 61@gmail.",
+      "updatedAt": "2026-02-09T01:12:24.645Z"
+    },
+    "584140837191@contact": {
+      "unreadCount": 1,
+      "lastMessageAt": {
+        "low": 1770599538,
+        "high": 0,
+        "unsigned": true
+      },
+      "lastReadAt": null,
+      "displayName": null,
+      "updatedAt": "2026-02-09T01:12:24.957Z"
+    },
+    "230042810450049@contact": {
+      "unreadCount": 2,
+      "lastMessageAt": 1770601754,
+      "lastReadAt": null,
+      "displayName": "Kalani Paredes🎶",
+      "updatedAt": "2026-02-09T01:49:15.675Z"
+    },
+    "584143815230@contact": {
+      "unreadCount": 1,
+      "lastMessageAt": {
+        "low": 1770634455,
+        "high": 0,
+        "unsigned": true
+      },
+      "lastReadAt": null,
+      "displayName": null,
+      "updatedAt": "2026-02-09T10:54:23.010Z"
+    },
+    "120363211756992147@g.us": {
+      "unreadCount": 26,
+      "lastMessageAt": 1770949711,
+      "lastReadAt": null,
+      "displayName": "Xue Zheng Rent a House",
+      "updatedAt": "2026-02-13T02:28:31.237Z"
+    },
+    "2195382604017@lid": {
+      "unreadCount": 1,
+      "lastMessageAt": 1770777490,
+      "lastReadAt": null,
+      "displayName": "Soraida",
+      "updatedAt": "2026-02-11T02:38:32.303Z"
+    },
+    "176012239323262@lid": {
+      "unreadCount": 1,
+      "lastMessageAt": 1770957898,
+      "lastReadAt": null,
+      "displayName": "Omar Suniaga",
+      "updatedAt": "2026-02-13T04:44:57.901Z"
     }
   }
 }

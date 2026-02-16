@@ -49,6 +49,11 @@ export const ChatView = ({ onBack, showBackButton }: ChatViewProps) => {
     // NEW: Track new messages received while scrolled up
     const [newMessagesWhileAway, setNewMessagesWhileAway] = useState(0);
     
+    // NEW: History loading state
+    const [isLoadingHistory, setIsLoadingHistory] = useState(false);
+    const [hasMoreHistory, setHasMoreHistory] = useState(true);
+    const [oldestLoadedMessageId, setOldestLoadedMessageId] = useState<string | null>(null);
+    
     // Search in chat state
     const [isSearchOpen, setIsSearchOpen] = useState(false);
     const [searchQuery, setSearchQuery] = useState('');
@@ -126,6 +131,56 @@ export const ChatView = ({ onBack, showBackButton }: ChatViewProps) => {
         ? Math.max(0, chatMessages.length - initialUnreadCount)
         : -1;
 
+    // Load historical messages with pagination
+    const loadHistory = useCallback(async (beforeMessageId?: string) => {
+        if (!activeChat || isLoadingHistory || !hasMoreHistory) return;
+
+        setIsLoadingHistory(true);
+
+        try {
+            console.log(`Loading history for ${activeChat}${beforeMessageId ? ` before ${beforeMessageId}` : ''}`);
+            
+            const response = await chatApi.getChatHistory(
+                activeChat, 
+                50, // Load 50 messages at a time
+                beforeMessageId,
+                true // Include media information
+            );
+
+            if (response.data.success) {
+                const historyMessages = response.data.data || [];
+                const newHasMore = response.data.hasMore || false;
+                
+                console.log(`Loaded ${historyMessages.length} historical messages for ${activeChat}`);
+
+                if (historyMessages.length > 0) {
+                    // Get current messages and prepend historical messages
+                    const currentMessages = messages[activeChat] || [];
+                    const combinedMessages = [...historyMessages, ...currentMessages];
+                    
+                    // Update messages state
+                    setMessages(activeChat, combinedMessages);
+                    
+                    // Update oldest message ID for next pagination
+                    const oldestMessage = historyMessages[0];
+                    if (oldestMessage?.id) {
+                        setOldestLoadedMessageId(oldestMessage.id);
+                    }
+
+                    setHasMoreHistory(newHasMore);
+                } else {
+                    setHasMoreHistory(false);
+                }
+            }
+        } catch (error) {
+            console.error('Failed to load chat history:', error);
+        } finally {
+            setIsLoadingHistory(false);
+        }
+    }, [activeChat, isLoadingHistory, hasMoreHistory, setMessages]);
+
+    
+
     // Mark all messages as read via API and update local state
     const markAllAsRead = useCallback(async () => {
         if (!activeChat || hasMarkedAsReadRef.current) return;
@@ -149,7 +204,7 @@ export const ChatView = ({ onBack, showBackButton }: ChatViewProps) => {
         }
     }, [activeChat, initialUnreadCount, markChatAsRead, chats]);
 
-    // Handle scroll to detect when user reaches the bottom
+    // Handle scroll to detect when user reaches top or bottom
     const handleScroll = useCallback(() => {
         const container = messagesContainerRef.current;
         if (!container) return;
@@ -157,6 +212,9 @@ export const ChatView = ({ onBack, showBackButton }: ChatViewProps) => {
         // Check if scrolled near bottom (within 100px)
         const distanceFromBottom = container.scrollHeight - container.scrollTop - container.clientHeight;
         const isNearBottom = distanceFromBottom < 100;
+        
+        // Check if scrolled near top (within 100px) for loading history
+        const isAtTop = container.scrollTop < 100;
 
         // Update ref for use in refresh logic
         isNearBottomRef.current = isNearBottom;
@@ -164,11 +222,16 @@ export const ChatView = ({ onBack, showBackButton }: ChatViewProps) => {
         // Show/hide scroll to bottom button (show when more than 300px from bottom)
         setShowScrollToBottom(distanceFromBottom > 300);
 
+        // Load more history when at top
+        if (isAtTop && hasMoreHistory && !isLoadingHistory) {
+            loadHistory(oldestLoadedMessageId || undefined);
+        }
+
         // Mark as read when near bottom
         if (isNearBottom && initialUnreadCount > 0 && !hasMarkedAsReadRef.current) {
             markAllAsRead();
         }
-    }, [initialUnreadCount, markAllAsRead]);
+    }, [initialUnreadCount, markAllAsRead, hasMoreHistory, isLoadingHistory, oldestLoadedMessageId, loadHistory]);
 
     // Scroll to bottom function
     const scrollToBottom = useCallback((smooth = true) => {
@@ -249,26 +312,57 @@ export const ChatView = ({ onBack, showBackButton }: ChatViewProps) => {
 
         const fetchMessages = async () => {
             setLoadingMessages(true);
+            
+            // Reset history state
+            setIsLoadingHistory(false);
+            setHasMoreHistory(true);
+            setOldestLoadedMessageId(null);
 
             try {
-                const response = await chatApi.getMessages(activeChat, 100);
-
-                if (response.data.success) {
-                    const newMessages = response.data.data || [];
+                // First, try to get enhanced history
+                console.log(`Fetching enhanced history for ${activeChat}`);
+                const historyResponse = await chatApi.getChatHistory(activeChat, 100, undefined, true);
+                
+                if (historyResponse.data.success && historyResponse.data.data.length > 0) {
+                    const newMessages = historyResponse.data.data || [];
                     setMessages(activeChat, newMessages);
+                    
+                    // Update history state
+                    setHasMoreHistory(historyResponse.data.hasMore || false);
+                    if (newMessages.length > 0) {
+                        setOldestLoadedMessageId(newMessages[0].id);
+                    }
+                    
+                    console.log(`Loaded ${newMessages.length} messages from enhanced history for ${activeChat}`);
+                } else {
+                    // Fallback to regular messages
+                    console.log(`No enhanced history, falling back to regular messages for ${activeChat}`);
+                    const response = await chatApi.getMessages(activeChat, 100);
+                    
+                    if (response.data.success) {
+                        const newMessages = response.data.data || [];
+                        setMessages(activeChat, newMessages);
+                        
+                        // No history available from API
+                        setHasMoreHistory(false);
+                    }
+                }
 
-                    // Mark messages as read on backend after loading
-                    if (initialUnreadCountRef.current > 0 && !hasMarkedAsReadRef.current) {
-                        hasMarkedAsReadRef.current = true;
-                        try {
-                            await chatApi.markAsRead(activeChat);
-                        } catch (error) {
-                            console.error('Failed to mark messages as read:', error);
-                        }
+                // Mark messages as read on backend after loading
+                if (initialUnreadCountRef.current > 0 && !hasMarkedAsReadRef.current) {
+                    hasMarkedAsReadRef.current = true;
+                    try {
+                        await chatApi.markAsRead(activeChat);
+                    } catch (error) {
+                        console.error('Failed to mark messages as read:', error);
                     }
                 }
             } catch (error) {
                 console.error('Failed to fetch messages:', error);
+                
+                // Reset history state on error
+                setHasMoreHistory(false);
+                setIsLoadingHistory(false);
             } finally {
                 setLoadingMessages(false);
             }
@@ -583,6 +677,25 @@ export const ChatView = ({ onBack, showBackButton }: ChatViewProps) => {
                         </div>
                     ) : (
                         <>
+                            {/* History loading indicator */}
+                            {isLoadingHistory && (
+                                <div className="flex items-center justify-center py-4">
+                                    <div className="flex items-center space-x-2 text-gray-500 dark:text-[#8696a0] bg-gray-200 dark:bg-[#182229] px-4 py-2 rounded-lg">
+                                        <LoadingSpinner size="sm" />
+                                        <span className="text-sm">Cargando historial...</span>
+                                    </div>
+                                </div>
+                            )}
+                            
+                            {/* No more history indicator */}
+                            {!hasMoreHistory && !isLoadingHistory && chatMessages.length > 0 && (
+                                <div className="flex items-center justify-center py-2">
+                                    <p className="text-gray-400 dark:text-[#667785] text-xs bg-gray-100 dark:bg-[#1a242a] px-3 py-1 rounded-full">
+                                        Inicio de la conversación
+                                    </p>
+                                </div>
+                            )}
+                            
                             {chatMessages.map((message: Message, index: number) => {
                                 const showSeparator = index === unreadStartIndex && initialUnreadCount > 0;
                                 const isSearchMatch = searchResults.includes(index);

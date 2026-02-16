@@ -7,6 +7,8 @@ import { useState, useEffect } from 'react';
 import { AlertTriangle, X, Trash2, CheckCircle } from 'lucide-react';
 import { deduplicateClasses, detectDuplicates } from '../scripts/deduplicateClasses';
 import type { Clase } from '../services/firestore/clasesService';
+import { InfoButton } from '../components/common/InfoButton';
+import { usePageInfo } from '../hooks/useViewInfo';
 
 interface DuplicateGroup {
     canonical: Clase;
@@ -16,6 +18,7 @@ interface DuplicateGroup {
 
 export const ConflictResolutionPage = () => {
     const [loading, setLoading] = useState(false);
+    const pageInfo = usePageInfo('conflictResolution');
     const [duplicateGroups, setDuplicateGroups] = useState<DuplicateGroup[]>([]);
     const [resolving, setResolving] = useState(false);
     const [resolved, setResolved] = useState(false);
@@ -94,6 +97,13 @@ export const ConflictResolutionPage = () => {
                                     {duplicateGroups.length} grupos de clases duplicadas detectados
                                 </p>
                             </div>
+                            {pageInfo.hasInfo && (
+                                <InfoButton
+                                    title={pageInfo.title}
+                                    description={pageInfo.description}
+                                    tips={pageInfo.tips}
+                                />
+                            )}
                         </div>
                         <button
                             onClick={() => window.history.back()}

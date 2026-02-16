@@ -9,6 +9,8 @@ import {
     Search, AlertCircle, Users, X, Save
 } from 'lucide-react';
 import { salonesService, Salon } from '../services/firestore';
+import { InfoButton } from '../components/common/InfoButton';
+import { usePageInfo } from '../hooks/useViewInfo';
 
 const ROOM_COLORS = [
     { value: '#8B5CF6', label: 'Púrpura' },
@@ -25,6 +27,7 @@ export const RoomsPage = () => {
     const [rooms, setRooms] = useState<Salon[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const pageInfo = usePageInfo('rooms');
     const [searchTerm, setSearchTerm] = useState('');
     const [editingRoom, setEditingRoom] = useState<Partial<Salon> | null>(null);
     const [editingId, setEditingId] = useState<string | null>(null);
@@ -144,6 +147,13 @@ export const RoomsPage = () => {
                         <span className="text-sm text-gray-500 dark:text-gray-400">
                             ({rooms.length} en Firestore)
                         </span>
+                        {pageInfo.hasInfo && (
+                            <InfoButton
+                                title={pageInfo.title}
+                                description={pageInfo.description}
+                                tips={pageInfo.tips}
+                            />
+                        )}
                     </div>
                     <button
                         onClick={openNewRoom}

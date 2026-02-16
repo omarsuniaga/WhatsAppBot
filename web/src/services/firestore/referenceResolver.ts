@@ -65,7 +65,8 @@ export class ReferenceResolverClass {
         const enriched: EnrichedClase = { ...clase };
 
         // Resolve teacher
-        const teacherId = clase.teacherId || clase.profesor_id;
+        const rawTeacherId = clase.teacherId || clase.profesor_id;
+        const teacherId = Array.isArray(rawTeacherId) ? rawTeacherId[0] : rawTeacherId;
         if (teacherId) {
             const cacheKey = `teacher:${teacherId}`;
             let teacher = cache.get(cacheKey);

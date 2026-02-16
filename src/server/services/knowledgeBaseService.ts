@@ -6,7 +6,8 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
-import type { 
+import { writeFileSyncAtomic } from '../utils/atomicWrite';
+import type {
     FAQ, 
     FAQCategory, 
     KnowledgeBaseConfig, 
@@ -130,7 +131,7 @@ export class KnowledgeBaseService {
     private saveData(): void {
         try {
             this.data.lastUpdated = new Date().toISOString();
-            fs.writeFileSync(this.dataPath, JSON.stringify(this.data, null, 2));
+            writeFileSyncAtomic(this.dataPath, JSON.stringify(this.data, null, 2));
         } catch (error) {
             console.error('Error saving knowledge base:', error);
         }
@@ -275,6 +276,35 @@ export class KnowledgeBaseService {
 
     public rejectFaq(id: string): boolean {
         return this.deleteFaq(id);
+    }
+
+    /**
+     * Find duplicate FAQ by question similarity
+     * Returns the duplicate FAQ if confidence > threshold, null otherwise
+     */
+    public findDuplicate(question: string, threshold: number = 0.85): FAQ | null {
+        const normalizedQuestion = this.normalizeText(question);
+        const questionKeywords = this.extractKeywords(question);
+
+        for (const faq of this.getApprovedFaqs()) {
+            // Check all questions in the FAQ
+            for (const existingQuestion of faq.questions) {
+                const normalizedExisting = this.normalizeText(existingQuestion);
+                
+                // Use existing calculateSimilarity method
+                const similarity = this.calculateSimilarity(
+                    normalizedQuestion,
+                    normalizedExisting
+                );
+
+                if (similarity >= threshold) {
+                    console.log(`[KnowledgeBaseService] Found duplicate: "${question}" matches "${existingQuestion}" (${similarity.toFixed(2)})`);
+                    return faq;
+                }
+            }
+        }
+
+        return null;
     }
 
     // ==========================================
@@ -565,7 +595,14 @@ export class KnowledgeBaseService {
             };
         } catch (error) {
             console.error('Error in KnowledgeBaseService.getStats:', error);
-            throw error;
+            return {
+                totalFaqs: 0,
+                approvedFaqs: 0,
+                pendingFaqs: 0,
+                totalCategories: 0,
+                mostUsedFaqs: [],
+                recentlyAdded: []
+            };
         }
     }
 }

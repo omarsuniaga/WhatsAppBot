@@ -2,9 +2,11 @@
  * LearningService - Learns from user responses to create new FAQs
  * Uses Gemini to generate question variations and extract keywords
  */
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { EventEmitter } from 'events';
+import { writeFileSyncAtomic } from '../utils/atomicWrite';
+import KnowledgeBaseService from './knowledgeBaseService';
 
 export interface LearnedResponse {
     id: string;
@@ -31,6 +33,12 @@ interface LearningData {
     autoApprove: boolean;
     minConfidenceForAutoApprove: number;
     responses: LearnedResponse[];
+    autoStats: {
+        totalAutoApproved: number;
+        totalFaqsCreated: number;
+        totalDuplicatesSkipped: number;
+        lastFaqsCreated: { faqId: string; learnedId: string; createdAt: string }[];
+    };
 }
 
 const DATA_PATH = join(process.cwd(), 'data', 'learned-responses.json');
@@ -43,6 +51,7 @@ class LearningService extends EventEmitter {
     private constructor() {
         super();
         this.data = this.load();
+        this.setupAutoFaqListener();
     }
 
     static getInstance(): LearningService {
@@ -65,7 +74,13 @@ class LearningService extends EventEmitter {
             version: 1,
             autoApprove: false,
             minConfidenceForAutoApprove: 0.9,
-            responses: []
+            responses: [],
+            autoStats: {
+                totalAutoApproved: 0,
+                totalFaqsCreated: 0,
+                totalDuplicatesSkipped: 0,
+                lastFaqsCreated: []
+            }
         };
     }
 
@@ -75,7 +90,7 @@ class LearningService extends EventEmitter {
             if (!existsSync(dir)) {
                 mkdirSync(dir, { recursive: true });
             }
-            writeFileSync(DATA_PATH, JSON.stringify(this.data, null, 2));
+            writeFileSyncAtomic(DATA_PATH, JSON.stringify(this.data, null, 2));
         } catch (error) {
             console.error('[LearningService] Error saving data:', error);
         }
@@ -141,6 +156,8 @@ class LearningService extends EventEmitter {
 
         // If auto-approve is enabled, emit approved event
         if (this.data.autoApprove) {
+            this.data.autoStats.totalAutoApproved++;
+            this.save();
             this.emit('learning:approved', learned);
         }
 
@@ -302,7 +319,11 @@ Responde SOLO en JSON válido (sin markdown):
     /**
      * Update settings
      */
-    updateSettings(settings: { autoApprove?: boolean; minConfidenceForAutoApprove?: number }): void {
+    updateSettings(settings: { 
+        autoApprove?: boolean;
+        minConfidenceForAutoApprove?: number;
+        processExisting?: boolean;
+    }): void {
         if (settings.autoApprove !== undefined) {
             this.data.autoApprove = settings.autoApprove;
         }
@@ -310,6 +331,14 @@ Responde SOLO en JSON válido (sin markdown):
             this.data.minConfidenceForAutoApprove = settings.minConfidenceForAutoApprove;
         }
         this.save();
+
+        // If autoApprove is enabled and processExisting is true, process all pending items
+        if (settings.autoApprove && settings.processExisting) {
+            console.log('[LearningService] Processing existing pending responses...');
+            this.processAllPending().catch(error => {
+                console.error('[LearningService] Error processing pending responses:', error);
+            });
+        }
     }
 
     /**
@@ -339,6 +368,121 @@ Responde SOLO en JSON válido (sin markdown):
             approved: responses.filter(r => r.status === 'approved').length,
             rejected: responses.filter(r => r.status === 'rejected').length,
             linkedToFaq: responses.filter(r => r.createdFaqId).length
+        };
+    }
+
+    /**
+     * Setup internal listener for auto-FAQ creation
+     */
+    private setupAutoFaqListener(): void {
+        this.on('learning:approved', (learned: LearnedResponse) => {
+            // If not already linked to FAQ, try to create one
+            if (!learned.createdFaqId) {
+                this.createFaqFromLearned(learned).catch(error => {
+                    console.error('[LearningService] Error creating FAQ from learned response:', error);
+                });
+            }
+        });
+    }
+
+    /**
+     * Create FAQ from learned response
+     * Automatically called when 'learning:approved' event fires
+     */
+    async createFaqFromLearned(learned: LearnedResponse): Promise<string | null> {
+        try {
+            const kbService = KnowledgeBaseService.getInstance();
+            
+            // Check for duplicate questions
+            const duplicate = kbService.findDuplicate(learned.originalQuestion);
+            if (duplicate) {
+                console.log(`[LearningService] Skipping FAQ creation - duplicate detected: ${duplicate.id}`);
+                this.data.autoStats.totalDuplicatesSkipped++;
+                this.save();
+                this.emit('learning:faq-duplicate-skipped', { learnedId: learned.id, duplicateFaqId: duplicate.id });
+                return null;
+            }
+
+            // Create FAQ from learned response
+            const faqData = {
+                category: learned.suggestedCategory || 'general',
+                questions: learned.extractedQuestions,
+                answer: learned.userResponse,
+                keywords: learned.extractedKeywords,
+                createdBy: 'ai_learned' as const,
+                approved: true
+            };
+
+            const createdFaq = kbService.addFaq(faqData);
+            
+            // Link learned response to FAQ
+            this.linkToFaq(learned.id, createdFaq.id);
+            
+            // Update stats
+            this.data.autoStats.totalFaqsCreated++;
+            this.data.autoStats.lastFaqsCreated.unshift({
+                faqId: createdFaq.id,
+                learnedId: learned.id,
+                createdAt: new Date().toISOString()
+            });
+            
+            // Keep only last 10 in history
+            if (this.data.autoStats.lastFaqsCreated.length > 10) {
+                this.data.autoStats.lastFaqsCreated.pop();
+            }
+            
+            this.save();
+            
+            console.log(`[LearningService] Created FAQ ${createdFaq.id} from learned response ${learned.id}`);
+            this.emit('learning:faq-created', { learnedId: learned.id, faqId: createdFaq.id });
+            
+            return createdFaq.id;
+        } catch (error) {
+            console.error('[LearningService] Error creating FAQ from learned response:', error);
+            return null;
+        }
+    }
+
+    /**
+     * Process all pending responses (used when autoApprove is enabled)
+     */
+    async processAllPending(): Promise<number> {
+        const pending = this.getPendingReviews();
+        let processed = 0;
+
+        for (const response of pending) {
+            try {
+                this.approveResponse(response.id, 'system_auto_process');
+                processed++;
+                // Small delay to avoid hammering
+                await new Promise(resolve => setTimeout(resolve, 100));
+            } catch (error) {
+                console.error(`[LearningService] Error processing pending response ${response.id}:`, error);
+            }
+        }
+
+        console.log(`[LearningService] Processed ${processed}/${pending.length} pending responses`);
+        return processed;
+    }
+
+    /**
+     * Get auto-approve statistics
+     */
+    getAutoApproveStats(): {
+        totalAutoApproved: number;
+        totalFaqsCreated: number;
+        totalDuplicatesSkipped: number;
+        lastFaqsCreated: { faqId: string; learnedId: string; createdAt: string }[];
+        autoApproveEnabled: boolean;
+        minConfidenceForAutoApprove: number;
+    } {
+        return {
+            totalAutoApproved: this.data.autoStats.totalAutoApproved,
+            totalFaqsCreated: this.data.autoStats.totalFaqsCreated,
+            totalDuplicatesSkipped: this.data.autoStats.totalDuplicatesSkipped,
+            lastFaqsCreated: this.data.autoStats.lastFaqsCreated,
+            autoApproveEnabled: this.data.autoApprove,
+            minConfidenceForAutoApprove: this.data.minConfidenceForAutoApprove
         };
     }
 

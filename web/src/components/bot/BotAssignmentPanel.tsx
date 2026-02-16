@@ -14,7 +14,8 @@ import {
     MessageSquare,
     TrendingUp,
     Loader2,
-    Save
+    Save,
+    UserCheck
 } from 'lucide-react';
 import { botAssignmentApi } from '../../api/client';
 
@@ -30,6 +31,7 @@ interface BotConfig {
     autoEscalate: boolean;
     escalateThreshold: number;
     learningEnabled: boolean;
+    requireHumanApproval: boolean;
 }
 
 interface BotStats {
@@ -88,7 +90,8 @@ export const BotAssignmentPanel = ({
         responseDelayMs: 1500,
         autoEscalate: true,
         escalateThreshold: 0.7,
-        learningEnabled: true
+        learningEnabled: true,
+        requireHumanApproval: false
     });
 
     // Fetch assignment
@@ -298,6 +301,31 @@ export const BotAssignmentPanel = ({
                                             <span className={clsx(
                                                 "absolute top-1 w-4 h-4 bg-white rounded-full transition-transform",
                                                 config.autoEscalate ? "right-1" : "left-1"
+                                            )} />
+                                        </button>
+                                    </div>
+
+                                    {/* Human approval toggle */}
+                                    <div className="flex items-center justify-between p-4 bg-[#202c33] rounded-lg">
+                                        <div>
+                                            <span className="text-[#e9edef] font-medium flex items-center gap-2">
+                                                <UserCheck className="w-4 h-4 text-[#00a884]" />
+                                                Requiere aprobación humana
+                                            </span>
+                                            <p className="text-xs text-[#8696a0]">
+                                                No envía automáticamente, genera borrador y espera validación
+                                            </p>
+                                        </div>
+                                        <button
+                                            onClick={() => handleConfigChange('requireHumanApproval', !config.requireHumanApproval)}
+                                            className={clsx(
+                                                "w-12 h-6 rounded-full transition-colors relative",
+                                                config.requireHumanApproval ? "bg-[#00a884]" : "bg-[#374248]"
+                                            )}
+                                        >
+                                            <span className={clsx(
+                                                "absolute top-1 w-4 h-4 bg-white rounded-full transition-transform",
+                                                config.requireHumanApproval ? "right-1" : "left-1"
                                             )} />
                                         </button>
                                     </div>

@@ -3,36 +3,32 @@
  * Sistema de respuestas automáticas con IA (Gemini)
  */
 
-import { GoogleGenerativeAI } from '@google/generative-ai';
+import { AIService } from './aiService';
 import { KnowledgeBaseService } from './knowledgeBaseService';
 import { EscalationService } from './escalationService';
-import type { 
-    AIResponse, 
-    ConversationContext, 
+import type {
+    AIResponse,
+    ConversationContext,
     ContextMessage,
-    KnowledgeBaseConfig 
+    KnowledgeBaseConfig
 } from '../types/knowledge';
 
 interface AutoResponseConfig {
     enabled: boolean;
-    geminiApiKey: string;
-    model: string;
     maxTokens: number;
     temperature: number;
 }
 
 const DEFAULT_CONFIG: AutoResponseConfig = {
     enabled: true,
-    geminiApiKey: process.env.GEMINI_API_KEY || '',
-    model: 'gemini-1.5-flash',
-    maxTokens: 1024,
+    maxTokens: 512,
     temperature: 0.7
 };
 
 export class AutoResponseService {
     private static instance: AutoResponseService;
     private config: AutoResponseConfig;
-    private genAI: GoogleGenerativeAI | null = null;
+    private aiService: AIService;
     private knowledgeBase: KnowledgeBaseService;
     private escalationService: EscalationService | null = null;
     private conversationContexts: Map<string, ConversationContext> = new Map();
@@ -40,7 +36,7 @@ export class AutoResponseService {
     private constructor() {
         this.config = DEFAULT_CONFIG;
         this.knowledgeBase = KnowledgeBaseService.getInstance();
-        this.initializeGemini();
+        this.aiService = AIService.getInstance();
     }
 
     public static getInstance(): AutoResponseService {
@@ -50,18 +46,6 @@ export class AutoResponseService {
         return AutoResponseService.instance;
     }
 
-    private initializeGemini(): void {
-        if (this.config.geminiApiKey) {
-            try {
-                this.genAI = new GoogleGenerativeAI(this.config.geminiApiKey);
-                console.log('✅ Gemini AI initialized for auto-response');
-            } catch (error) {
-                console.error('❌ Failed to initialize Gemini AI:', error);
-            }
-        } else {
-            console.warn('⚠️ Gemini API key not configured for auto-response');
-        }
-    }
 
     public setEscalationService(service: EscalationService): void {
         this.escalationService = service;
@@ -69,13 +53,10 @@ export class AutoResponseService {
 
     public updateConfig(config: Partial<AutoResponseConfig>): void {
         this.config = { ...this.config, ...config };
-        if (config.geminiApiKey) {
-            this.initializeGemini();
-        }
     }
 
     public isEnabled(): boolean {
-        return this.config.enabled && this.genAI !== null;
+        return this.config.enabled;
     }
 
     // ==========================================
@@ -215,27 +196,18 @@ export class AutoResponseService {
         message: string,
         kbConfig: KnowledgeBaseConfig
     ): Promise<AIResponse> {
-        if (!this.genAI) {
-            return {
-                canAnswer: false,
-                confidence: 0,
-                response: '',
-                matchedFaqId: null,
-                detectedIntent: 'unknown',
-                shouldEscalate: true,
-                escalationReason: 'AI not configured'
-            };
-        }
 
         try {
-            const model = this.genAI.getGenerativeModel({ model: this.config.model });
             const context = this.getContext(chatJid);
             const faqs = this.knowledgeBase.getApprovedFaqs();
 
             const prompt = this.buildAnalysisPrompt(message, context, faqs, kbConfig);
 
-            const result = await model.generateContent(prompt);
-            const responseText = result.response.text();
+            const result = await this.aiService.generateText(prompt, {
+                maxTokens: this.config.maxTokens,
+                temperature: this.config.temperature,
+            });
+            const responseText = result.text;
 
             // Parse JSON response
             const jsonMatch = responseText.match(/\{[\s\S]*\}/);
@@ -288,7 +260,7 @@ export class AutoResponseService {
             professional: 'Usa un tono profesional pero accesible. Usa emojis ocasionalmente si es apropiado.'
         };
 
-        const faqsText = faqs.map(faq => 
+        const faqsText = faqs.map(faq =>
             `[ID: ${faq.id}]\nPreguntas: ${faq.questions.join(', ')}\nRespuesta: ${faq.answer}\n`
         ).join('\n---\n');
 
@@ -342,22 +314,24 @@ Responde ÚNICAMENTE con un JSON válido en el siguiente formato:
             .replace(/\{nombre\}/gi, customerName || 'estimado cliente')
             .replace(/\{empresa\}/gi, kbConfig.businessName);
 
-        // Optionally use AI to adapt tone
+        // NOTE: Tone adaptation via AI disabled to save API quota.
+        // The main AI prompt already includes tone instructions.
+        // Uncomment below if you have a paid Gemini plan and want extra tone polish.
+        /*
         if (this.genAI && kbConfig.toneStyle !== 'professional') {
             try {
-                const model = this.genAI.getGenerativeModel({ model: this.config.model });
-                const tonePrompt = `
-Adapta el siguiente mensaje al tono ${kbConfig.toneStyle === 'formal' ? 'formal' : 'amigable'}:
-"${response}"
-
-Responde SOLO con el mensaje adaptado, sin explicaciones.
-`;
+                const model = this.genAI.getGenerativeModel({
+                    model: this.config.model,
+                    generationConfig: { maxOutputTokens: 256 }
+                });
+                const tonePrompt = `Adapta al tono ${kbConfig.toneStyle === 'formal' ? 'formal' : 'amigable'}: "${response}"\nSolo el mensaje adaptado.`;
                 const result = await model.generateContent(tonePrompt);
                 response = result.response.text().trim();
             } catch (error) {
                 console.warn('Could not adapt tone:', error);
             }
         }
+        */
 
         return response;
     }
@@ -416,7 +390,7 @@ Responde SOLO con el mensaje adaptado, sin explicaciones.
         isFromMe: boolean
     ): void {
         let context = this.conversationContexts.get(chatJid);
-        
+
         if (!context) {
             context = {
                 chatJid,

@@ -6,6 +6,7 @@
  */
 
 import { FileStore, createStores, AttendanceFileData } from './FileStore';
+import { getErrorMessage } from '../utils/errorUtils';
 import type { 
     DailyAttendance, 
     AttendanceRecord, 
@@ -198,8 +199,8 @@ export class AttendanceRepository implements IAttendanceRepository {
                         }
                     );
                     imported++;
-                } catch (error: any) {
-                    errors.push(`Error importing ${record.studentId} on ${date}: ${error.message}`);
+                } catch (error: unknown) {
+                    errors.push(`Error importing ${record.studentId} on ${date}: ${getErrorMessage(error)}`);
                 }
             }
         }

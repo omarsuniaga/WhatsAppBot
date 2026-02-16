@@ -18,8 +18,7 @@ import {
     kbController,
     automationsController,
     whatsappSendController,
-    triggersController,
-    aiController
+    triggersController
 } from '../controllers';
 
 const router = Router();
@@ -176,10 +175,44 @@ router.get('/triggers/stats', triggersController.getStats);
 router.post('/triggers/stats/reset', requireAdminAuth, triggersController.resetStats);
 router.post('/triggers/test', triggersController.testMessage);
 
-// ============================================================
-// AI FEATURES (Gemini-powered)
-// ============================================================
-router.post('/ai/generate-template', requireAdminAuth, aiController.generateTemplate);
-router.post('/ai/generate-variation', requireAdminAuth, aiController.generateVariation);
+// ------------------------------------------------------------------
+// Lightweight Daily Reminders endpoints (fallback for frontend)
+// These provide basic responses when the main API router is not available
+// or the service runs from a different server process during development.
+// ------------------------------------------------------------------
+router.get('/daily-reminders/status', (req, res) => {
+    res.json({
+        success: true,
+        data: {
+            enabled: false,
+            scheduleTime: '12:01',
+            lastRunAt: null,
+            autoSend: false
+        }
+    });
+});
+
+router.get('/daily-reminders/config', (req, res) => {
+    res.json({
+        success: true,
+        data: {
+            enabled: false,
+            scheduleTime: '12:01',
+            targetGroups: [
+                'PROGRAMA ORQUESTAL - El Sistema Punta Cana',
+                'PROGRAMA CORAL'
+            ],
+            autoSend: false
+        }
+    });
+});
+
+router.post('/daily-reminders/test', (req, res) => {
+    res.json({ success: true, message: 'Test endpoint (fallback) - no draft created on backend.' });
+});
+
+router.post('/daily-reminders/execute', (req, res) => {
+    res.status(501).json({ success: false, message: 'Execute not implemented on backend fallback.' });
+});
 
 export default router;

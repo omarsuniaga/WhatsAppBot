@@ -14,7 +14,20 @@ export { profesoresService, type Profesor } from './profesoresService';
 export { maestrosService, type Maestro, type MaestroInstrument, type MaestroSchedule } from './maestrosService';
 
 // Class services
-export { clasesService, type Clase, type ScheduleSlot, type ConflictResult, type ChangeHistoryEntry } from './clasesService';
+export {
+    clasesService,
+    type Clase,
+    type ScheduleSlot,
+    type ConflictResult,
+    type ChangeHistoryEntry,
+    // Multi-teacher helper functions
+    getTeacherIds,
+    isTeacherAssigned,
+    addTeacherToClass,
+    removeTeacherFromClass,
+    getPrimaryTeacherId,
+    hasMultipleTeachers
+} from './clasesService';
 export { emergencyClassesService, type EmergencyClass } from './emergencyClassesService';
 
 // Rooms service
@@ -47,3 +60,6 @@ export { ticketsService, type Ticket } from './ticketsService';
 // Utility services
 export { referenceResolver, type EnrichedClase, type EnrichedAlumno, type EnrichedMaestro } from './referenceResolver';
 export { dataValidator, type IntegrityReport, type OrphanedReference } from './dataValidator';
+
+// Holidays service
+export { holidaysService, type Holiday } from './holidaysService';

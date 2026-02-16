@@ -1,0 +1,120 @@
+
+> @bot-wa/bot-wa-baileys@1.1.5 dev
+> concurrently --kill-others --kill-signal SIGINT "npm run server:dev" "npm run web"
+
+(node:14216) [DEP0060] DeprecationWarning: The `util._extend` API is deprecated. Please use Object.assign() instead.
+(Use `node --trace-deprecation ...` to show where the warning was created)
+[0] 
+[0] > @bot-wa/bot-wa-baileys@1.1.5 server:dev
+[0] > ts-node src/server/index.ts
+[0] 
+[1] 
+[1] > @bot-wa/bot-wa-baileys@1.1.5 web
+[1] > cd web && npm run dev
+[1] 
+[1] 
+[1] > bot-wa-web@0.0.1 dev
+[1] > vite
+[1] 
+[1] Port 5173 is in use, trying another one...
+[1] 
+[1]   [32m[1mVITE[22m v5.4.21[39m  [2mready in [0m[1m583[22m[2m[0m ms[22m
+[1] 
+[1]   [32m➜[39m  [1mLocal[22m:   [36mhttp://localhost:[1m5174[22m/[39m
+[1] [2m  [32m➜[39m  [1mNetwork[22m[2m: use [22m[1m--host[22m[2m to expose[22m
+[0] [ReadStateService] Loaded 3 chat read states
+[0] [ContactStore] Loaded 17 contacts
+[0] [ChatState] Loaded 13 chat states from disk
+[0] [Queue] Processing started
+[0] [QASearchAgent] Knowledge base loaded: 5 categories, 6 Q&A items
+[0] Bot status para 18097176627@s.whatsapp.net: ACTIVO
+[0] [BotOrchestrator] Restored 1 active chats to DecisionAgent
+[0] [QASearchAgent] Knowledge base loaded: 5 categories, 6 Q&A items
+[0] [BotOrchestrator] Gemini agent initialized and API key persisted
+[0] [KnowledgeBaseService] Initializing. Data path: C:\Users\omare\.claude\projects\friendly-lalande\data\knowledge-base.json
+[0] [KnowledgeBaseService] Reading data file...
+[0] [KnowledgeBaseService] Data loaded. Categories: 5
+[0] [EscalationService] Initializing. Data path: C:\Users\omare\.claude\projects\friendly-lalande\data\escalation.json
+[0] [EscalationService] Reading data file...
+[0] [EscalationService] Data loaded. Tickets: 0 Admins: 1
+[0] [dotenv@17.2.3] injecting env (0) from .env -- tip: ✅ audit secrets and track compliance: https://dotenvx.com/ops
+[0] Firebase Service Account Path: C:\Users\omare\.claude\projects\friendly-lalande\orquestapuntacana-firebase-adminsdk-fbsvc-1adc55a0b0.json
+[0] ✅ Firebase Admin initialized with Service Account file
+[0] 🔥 Connected to Firestore: orquestapuntacana
+[0] [2026-02-09T20:32:42.115Z] [INFO] DailyReminderService: Initialized (Version: Multi-Model Resilience Active) 
+[0] [Router] Registering daily-reminders routes...
+[0] [ErrorHandler] Registered shutdown task: stop_accepting_new_connections (priority: 1)
+[0] [ErrorHandler] Registered shutdown task: save_critical_data (priority: 2)
+[0] [ErrorHandler] Registered shutdown task: cleanup_resources (priority: 3)
+[0] [ErrorHandler] Registered shutdown task: close_database_connections (priority: 4)
+[0] [ErrorHandler] Registered shutdown task: flush_logs (priority: 5)
+[0] [ErrorHandler] Registered shutdown task: stop_broadcast_schedulers (priority: 2)
+[0] [ErrorHandler] Registered shutdown task: stop_firestore_worker (priority: 2)
+[0] [ErrorHandler] Registered shutdown task: cleanup_bot_service (priority: 3)
+[0] [ErrorHandler] Registered shutdown task: save_persistence_data (priority: 2)
+[0] [2026-02-09T20:32:43.687Z] [INFO] [FirestoreBroadcast] Background worker started 
+[0] [2026-02-09T20:32:43.687Z] [WARN] [FirestoreBroadcast] skipping check: Bot not connected 
+[0] [2026-02-09T20:32:43.688Z] [INFO] [Server] Firestore Broadcast worker initialized 
+[0] [Repos] Initializing all repositories...
+[0] [ErrorHandler] Servers configured for graceful shutdown
+[0] [2026-02-09T20:32:43.693Z] [WARN] [Baileys] Session directory too small (53 bytes), likely corrupted 
+[0] [BotOrchestrator] Gemini agent initialized and API key persisted
+[0] AI Agents initialized via BotOrchestrator
+[0] [ErrorHandler] UNCAUGHT EXCEPTION: {
+[0]   message: 'listen EADDRINUSE: address already in use :::3001',
+[0]   stack: 'Error: listen EADDRINUSE: address already in use :::3001\n' +
+[0]     '    at Server.setupListenHandle [as _listen2] (node:net:1940:16)\n' +
+[0]     '    at listenInCluster (node:net:1997:12)\n' +
+[0]     '    at Server.listen (node:net:2102:7)\n' +
+[0]     '    at Object.<anonymous> (C:\\Users\\omare\\.claude\\projects\\friendly-lalande\\src\\server\\index.ts:249:12)\n' +
+[0]     '    at Module._compile (node:internal/modules/cjs/loader:1761:14)\n' +
+[0]     '    at Module.m._compile (C:\\Users\\omare\\.claude\\projects\\friendly-lalande\\node_modules\\ts-node\\src\\index.ts:1618:23)\n' +
+[0]     '    at node:internal/modules/cjs/loader:1893:10\n' +
+[0]     '    at Object.require.extensions.<computed> [as .ts] (C:\\Users\\omare\\.claude\\projects\\friendly-lalande\\node_modules\\ts-node\\src\\index.ts:1621:12)\n' +
+[0]     '    at Module.load (node:internal/modules/cjs/loader:1481:32)\n' +
+[0]     '    at Module._load (node:internal/modules/cjs/loader:1300:12)',
+[0]   timestamp: '2026-02-09T20:32:43.723Z'
+[0] }
+[0] [ErrorHandler] Starting graceful shutdown (uncaughtException)...
+[0] [ErrorHandler] Executing: stop_accepting_new_connections
+[0] Stopping accepting new connections...
+[0] [ErrorHandler] Executing: save_critical_data
+[0] Saving critical data...
+[0] [ErrorHandler] Executing: stop_broadcast_schedulers
+[0] [BroadcastScheduler] Stopped
+[0] [ErrorHandler] Executing: stop_firestore_worker
+[0] [2026-02-09T20:32:43.725Z] [INFO] [FirestoreBroadcast] Background worker stopped 
+[0] [ErrorHandler] Executing: save_persistence_data
+[0] [ErrorHandler] Executing: cleanup_resources
+[0] Cleaning up resources...
+[0] [ErrorHandler] Executing: cleanup_bot_service
+[0] [ErrorHandler] Executing: close_database_connections
+[0] Closing database connections...
+[0] [ErrorHandler] Executing: flush_logs
+[0] Flushing logs...
+[0] [2026-02-09T20:32:43.775Z] [WARN] [Baileys] Invalid session files detected during init, clearing... 
+[0] [2026-02-09T20:32:43.775Z] [INFO] [Baileys] Starting session cleanup process... 
+[0] [BroadcastScheduler] Started - checking every 60 seconds
+[0] [BroadcastScheduler] Checking for missed campaigns...
+[0] [2026-02-09T20:32:43.866Z] [INFO] DailyReminder: Scheduler started (Polling every minute for dynamic schedule) 
+[0] [ErrorHandler] Completed: stop_accepting_new_connections
+[0] [ErrorHandler] Completed: save_critical_data
+[0] [ErrorHandler] Completed: stop_broadcast_schedulers
+[0] [ErrorHandler] Completed: stop_firestore_worker
+[0] [ErrorHandler] Completed: cleanup_resources
+[0] [ErrorHandler] Completed: cleanup_bot_service
+[0] [ErrorHandler] Completed: close_database_connections
+[0] [ErrorHandler] Completed: flush_logs
+[0] [2026-02-09T20:32:43.867Z] [INFO] [Server] Daily Reminder scheduler initialized 
+[0] [2026-02-09T20:32:43.870Z] [INFO] [Server] Broadcast scheduler initialized 
+[0] [Repos] All repositories initialized
+[0] [2026-02-09T20:32:43.878Z] [INFO] [Server] Backend repositories initialized 
+[0] [Persistence] All repositories initialized
+[0] [2026-02-09T20:32:43.880Z] [INFO] [Server] Persistence layer initialized 
+[0] [ErrorHandler] Completed: save_persistence_data
+[0] [ErrorHandler] Closing Socket.IO server...
+[0] [ErrorHandler] Closing HTTP server...
+[0] [ErrorHandler] Graceful shutdown completed (uncaughtException)
+[0] npm run server:dev exited with code 1
+--> Sending SIGINT to other processes..
+[1] npm run web exited with code 1

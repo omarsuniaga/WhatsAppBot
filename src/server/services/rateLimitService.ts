@@ -1,5 +1,6 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
+import { writeFileSyncAtomic } from '../utils/atomicWrite';
 import {
     RateLimitData,
     RateLimitStatus,
@@ -73,7 +74,7 @@ class RateLimitService {
             if (!existsSync(dir)) {
                 mkdirSync(dir, { recursive: true });
             }
-            writeFileSync(DATA_PATH, JSON.stringify(this.data, null, 2));
+            writeFileSyncAtomic(DATA_PATH, JSON.stringify(this.data, null, 2));
         } catch (error) {
             console.error('Error saving rate limit data:', error);
         }

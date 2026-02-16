@@ -5,6 +5,7 @@
 
 import { Request, Response } from 'express';
 import { BroadcastService } from '../services/broadcastService';
+import { getErrorMessage } from '../utils/errorUtils';
 
 const broadcastService = BroadcastService.getInstance();
 
@@ -15,9 +16,19 @@ const broadcastService = BroadcastService.getInstance();
 export const getConfig = async (req: Request, res: Response): Promise<void> => {
     try {
         const config = broadcastService.getConfig();
-        res.json({ success: true, data: config });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+        // Include legacy aliases for existing frontend forms
+        res.json({
+            success: true,
+            data: {
+                ...config,
+                messageDelay: config.defaultDelay,
+                randomizeDelay: config.defaultRandomizeDelay,
+                startHour: config.allowedHours?.start,
+                endHour: config.allowedHours?.end
+            }
+        });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -25,8 +36,8 @@ export const updateConfig = async (req: Request, res: Response): Promise<void> =
     try {
         const config = broadcastService.updateConfig(req.body);
         res.json({ success: true, data: config });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -38,8 +49,8 @@ export const getContactLists = async (req: Request, res: Response): Promise<void
     try {
         const lists = broadcastService.getContactLists();
         res.json({ success: true, data: lists });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -54,8 +65,8 @@ export const getContactList = async (req: Request, res: Response): Promise<void>
         }
 
         res.json({ success: true, data: list });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -70,8 +81,8 @@ export const createContactList = async (req: Request, res: Response): Promise<vo
 
         const list = broadcastService.createContactList({ name, description, tags });
         res.json({ success: true, data: list });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -86,8 +97,8 @@ export const updateContactList = async (req: Request, res: Response): Promise<vo
         }
 
         res.json({ success: true, data: list });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -102,8 +113,8 @@ export const deleteContactList = async (req: Request, res: Response): Promise<vo
         }
 
         res.json({ success: true });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -133,8 +144,8 @@ export const addContactToList = async (req: Request, res: Response): Promise<voi
         }
 
         res.json({ success: true, data: list });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -149,8 +160,8 @@ export const removeContactFromList = async (req: Request, res: Response): Promis
         }
 
         res.json({ success: true, data: list });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -166,8 +177,8 @@ export const importContacts = async (req: Request, res: Response): Promise<void>
 
         const result = broadcastService.importContacts(id, contacts);
         res.json({ success: true, data: result });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -179,8 +190,8 @@ export const getTemplates = async (req: Request, res: Response): Promise<void> =
     try {
         const templates = broadcastService.getTemplates();
         res.json({ success: true, data: templates });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -195,8 +206,8 @@ export const getTemplate = async (req: Request, res: Response): Promise<void> =>
         }
 
         res.json({ success: true, data: template });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -219,8 +230,8 @@ export const createTemplate = async (req: Request, res: Response): Promise<void>
         });
 
         res.json({ success: true, data: template });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -235,8 +246,8 @@ export const updateTemplate = async (req: Request, res: Response): Promise<void>
         }
 
         res.json({ success: true, data: template });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -251,8 +262,8 @@ export const deleteTemplate = async (req: Request, res: Response): Promise<void>
         }
 
         res.json({ success: true });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -264,8 +275,8 @@ export const getCampaigns = async (req: Request, res: Response): Promise<void> =
     try {
         const campaigns = broadcastService.getCampaigns();
         res.json({ success: true, data: campaigns });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -280,8 +291,8 @@ export const getCampaign = async (req: Request, res: Response): Promise<void> =>
         }
 
         res.json({ success: true, data: campaign });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -322,8 +333,8 @@ export const createCampaign = async (req: Request, res: Response): Promise<void>
         });
 
         res.json({ success: true, data: campaign });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -338,8 +349,8 @@ export const updateCampaign = async (req: Request, res: Response): Promise<void>
         }
 
         res.json({ success: true, data: campaign });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -354,8 +365,8 @@ export const deleteCampaign = async (req: Request, res: Response): Promise<void>
         }
 
         res.json({ success: true });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -370,8 +381,8 @@ export const startCampaign = async (req: Request, res: Response): Promise<void> 
         }
 
         res.json({ success: true, data: { message: 'Campaign started' } });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -386,8 +397,8 @@ export const pauseCampaign = async (req: Request, res: Response): Promise<void> 
         }
 
         res.json({ success: true, data: { message: 'Campaign paused' } });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -416,8 +427,8 @@ export const getCampaignProgress = async (req: Request, res: Response): Promise<
         }
 
         res.json({ success: true, data: progress });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };
 
@@ -429,7 +440,7 @@ export const getStats = async (req: Request, res: Response): Promise<void> => {
     try {
         const stats = broadcastService.getStats();
         res.json({ success: true, data: stats });
-    } catch (error: any) {
-        res.status(500).json({ success: false, error: error.message });
+    } catch (error: unknown) {
+        res.status(500).json({ success: false, error: getErrorMessage(error) });
     }
 };

@@ -1,8 +1,10 @@
-/**
+﻿/**
  * Bot Assignment Controller - Handles API routes for bot configurations per chat
  */
 import { Request, Response } from 'express';
+import Logger from '../services/loggerService';
 import { BotOrchestrator } from '../../agents/BotOrchestrator';
+import { getErrorMessage } from '../utils/errorUtils';
 
 /**
  * Get all bot assignments
@@ -23,11 +25,11 @@ export const getAll = async (req: Request, res: Response): Promise<void> => {
             data: assignments,
             stats: assignmentService.getAggregateStats()
         });
-    } catch (error: any) {
-        console.error('Error getting bot assignments:', error);
+    } catch (error: unknown) {
+        Logger.error('Error getting bot assignments:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -55,11 +57,11 @@ export const getByJid = async (req: Request, res: Response): Promise<void> => {
             success: true,
             data: assignment
         });
-    } catch (error: any) {
-        console.error('Error getting bot assignment:', error);
+    } catch (error: unknown) {
+        Logger.error('Error getting bot assignment:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -110,11 +112,11 @@ export const createOrUpdate = async (req: Request, res: Response): Promise<void>
             success: true,
             data: assignment
         });
-    } catch (error: any) {
-        console.error('Error creating/updating bot assignment:', error);
+    } catch (error: unknown) {
+        Logger.error('Error creating/updating bot assignment:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -150,11 +152,11 @@ export const update = async (req: Request, res: Response): Promise<void> => {
             success: true,
             data: assignment
         });
-    } catch (error: any) {
-        console.error('Error updating bot assignment:', error);
+    } catch (error: unknown) {
+        Logger.error('Error updating bot assignment:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -198,11 +200,11 @@ export const toggleBot = async (req: Request, res: Response): Promise<void> => {
             success: true,
             data: assignment
         });
-    } catch (error: any) {
-        console.error('Error toggling bot:', error);
+    } catch (error: unknown) {
+        Logger.error('Error toggling bot:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -237,11 +239,11 @@ export const deleteAssignment = async (req: Request, res: Response): Promise<voi
             success: true,
             data: { deleted: true }
         });
-    } catch (error: any) {
-        console.error('Error deleting bot assignment:', error);
+    } catch (error: unknown) {
+        Logger.error('Error deleting bot assignment:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -260,11 +262,11 @@ export const getDefaultConfig = async (req: Request, res: Response): Promise<voi
             success: true,
             data: defaultConfig
         });
-    } catch (error: any) {
-        console.error('Error getting default config:', error);
+    } catch (error: unknown) {
+        Logger.error('Error getting default config:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -285,11 +287,11 @@ export const updateDefaultConfig = async (req: Request, res: Response): Promise<
             success: true,
             data: assignmentService.getDefaultConfig()
         });
-    } catch (error: any) {
-        console.error('Error updating default config:', error);
+    } catch (error: unknown) {
+        Logger.error('Error updating default config:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -308,11 +310,12 @@ export const getStats = async (req: Request, res: Response): Promise<void> => {
             success: true,
             data: stats
         });
-    } catch (error: any) {
-        console.error('Error getting assignment stats:', error);
+    } catch (error: unknown) {
+        Logger.error('Error getting assignment stats:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
+

@@ -1,13 +1,13 @@
 /**
- * TemplatesPage - Manage message templates
+ * TemplatesPage - Manage message templates with AI Generator
  */
 
 import { useState, useEffect } from 'react';
 import {
     Mail, Plus, Edit2, Trash2, RefreshCw,
-    Copy, AlertCircle, Search, Sparkles
+    Copy, AlertCircle, Search, Sparkles, HelpCircle, X
 } from 'lucide-react';
-import { aiApi } from '../api/aiApi';
+import { aiApi } from '../api/client';
 
 interface Template {
     id: string;
@@ -24,7 +24,7 @@ interface Template {
     updatedAt?: string;
 }
 
-const API_BASE = import.meta.env.VITE_API_BASE_URL;
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/admin';
 
 export const TemplatesPage = () => {
     const [templates, setTemplates] = useState<Template[]>([]);
@@ -33,6 +33,7 @@ export const TemplatesPage = () => {
     const [searchTerm, setSearchTerm] = useState('');
     const [editingTemplate, setEditingTemplate] = useState<Template | null>(null);
     const [isCreating, setIsCreating] = useState(false);
+    const [showHelp, setShowHelp] = useState(false);
 
     const getAdminKey = () => localStorage.getItem('ADMIN_API_KEY') || 'dev-admin-key-123';
 
@@ -125,15 +126,84 @@ export const TemplatesPage = () => {
                         <h1 className="text-2xl font-bold text-gray-800 dark:text-gray-100">
                             Plantillas de Mensajes
                         </h1>
+                        <button
+                            onClick={() => setShowHelp(true)}
+                            className="p-1 text-gray-400 hover:text-cyan-500 transition-colors"
+                            title="Ayuda"
+                        >
+                            <HelpCircle className="w-5 h-5" />
+                        </button>
                     </div>
                     <button
-                        onClick={() => { setIsCreating(true); setEditingTemplate({ id: '', name: '', code: '', body: '', variables: [], category: 'notification' }); }}
+                        onClick={() => { setIsCreating(true); setEditingTemplate({ id: '', name: '', code: '', body: '', variables: [], category: 'reminder' }); }}
                         className="flex items-center gap-2 px-4 py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg font-medium transition-colors"
                     >
                         <Plus className="w-4 h-4" />
                         Nueva Plantilla
                     </button>
                 </div>
+
+                {/* Help Modal */}
+                {showHelp && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setShowHelp(false)}>
+                        <div className="bg-white dark:bg-gray-800 rounded-lg w-full max-w-lg mx-4 p-6 max-h-[80vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
+                            <div className="flex items-center justify-between mb-4">
+                                <h2 className="text-xl font-bold text-gray-800 dark:text-gray-100 flex items-center gap-2">
+                                    <HelpCircle className="w-5 h-5 text-cyan-500" />
+                                    Cómo usar las Plantillas
+                                </h2>
+                                <button onClick={() => setShowHelp(false)} className="text-gray-400 hover:text-gray-600">
+                                    <X className="w-5 h-5" />
+                                </button>
+                            </div>
+
+                            <div className="space-y-4 text-sm text-gray-600 dark:text-gray-300">
+                                <div className="p-3 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg border border-cyan-200 dark:border-cyan-700">
+                                    <h3 className="font-semibold text-cyan-800 dark:text-cyan-300 mb-1">📝 ¿Qué son las plantillas?</h3>
+                                    <p>Las plantillas son mensajes predefinidos que puedes reutilizar para enviar a tus contactos, con variables dinámicas que se reemplazan automáticamente.</p>
+                                </div>
+
+                                <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-700">
+                                    <h3 className="font-semibold text-purple-800 dark:text-purple-300 mb-1">✨ Generación con IA</h3>
+                                    <p>Usa el botón "Generar con IA" para crear plantillas automáticamente. Selecciona el propósito y tono, y la IA creará el mensaje por ti.</p>
+                                </div>
+
+                                <div className="p-3 bg-gray-50 dark:bg-gray-700/50 rounded-lg">
+                                    <h3 className="font-semibold text-gray-700 dark:text-gray-200 mb-2">📋 Campos importantes:</h3>
+                                    <ul className="space-y-2">
+                                        <li><strong className="text-cyan-600">Nombre:</strong> Nombre descriptivo para identificar la plantilla</li>
+                                        <li><strong className="text-cyan-600">Código:</strong> Identificador único (ej: "recordatorio_piano"). <span className="text-amber-600 dark:text-amber-400">¡Debe ser único!</span></li>
+                                        <li><strong className="text-cyan-600">Categoría:</strong> Tipo de mensaje (recordatorio, bienvenida, etc.)</li>
+                                        <li><strong className="text-cyan-600">Mensaje:</strong> El contenido con variables</li>
+                                    </ul>
+                                </div>
+
+                                <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-700">
+                                    <h3 className="font-semibold text-green-800 dark:text-green-300 mb-1">🔤 Variables dinámicas</h3>
+                                    <p className="mb-2">Usa <code className="bg-white dark:bg-gray-700 px-1 rounded">{'{{nombre}}'}</code> para insertar datos que cambiarán por cada contacto:</p>
+                                    <div className="flex flex-wrap gap-1">
+                                        <span className="text-xs bg-green-100 dark:bg-green-800 px-2 py-0.5 rounded">{'{{nombre}}'}</span>
+                                        <span className="text-xs bg-green-100 dark:bg-green-800 px-2 py-0.5 rounded">{'{{fecha}}'}</span>
+                                        <span className="text-xs bg-green-100 dark:bg-green-800 px-2 py-0.5 rounded">{'{{hora}}'}</span>
+                                        <span className="text-xs bg-green-100 dark:bg-green-800 px-2 py-0.5 rounded">{'{{instrumento}}'}</span>
+                                    </div>
+                                </div>
+
+                                <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-700">
+                                    <h3 className="font-semibold text-amber-800 dark:text-amber-300 mb-1">⚠️ Error "código ya existe"</h3>
+                                    <p>Si ves este error, cambia el valor del campo "Código" a uno diferente antes de guardar.</p>
+                                </div>
+                            </div>
+
+                            <button
+                                onClick={() => setShowHelp(false)}
+                                className="mt-6 w-full py-2 bg-cyan-500 hover:bg-cyan-600 text-white rounded-lg font-medium transition-colors"
+                            >
+                                ¡Entendido!
+                            </button>
+                        </div>
+                    </div>
+                )}
 
                 {/* Search */}
                 <div className="relative mb-6">
@@ -294,10 +364,10 @@ const TemplateEditModal = ({
                 targetAudience: 'padres'
             });
 
-            if (response.success && response.template) {
-                setName(response.template.nombre);
-                setBody(response.template.contenido);
-                setCode(response.template.nombre.toLowerCase().replace(/\s+/g, '_'));
+            if (response.data?.success && response.data?.template) {
+                setName(response.data.template.nombre);
+                setBody(response.data.template.contenido);
+                setCode(response.data.template.nombre.toLowerCase().replace(/\s+/g, '_'));
                 setShowAI(false);
             }
         } catch (error) {
@@ -317,9 +387,9 @@ const TemplateEditModal = ({
                 purpose: aiPurpose
             });
 
-            if (response.success && response.variation) {
-                setBody(response.variation.contenido);
-                setName(response.variation.nombre);
+            if (response.data?.success && response.data?.variation) {
+                setBody(response.data.variation.contenido);
+                setName(response.data.variation.nombre);
             }
         } catch (error) {
             alert('Error generando variación: ' + error);
@@ -339,8 +409,10 @@ const TemplateEditModal = ({
             code: code.trim().toLowerCase().replace(/\s+/g, '_'),
             body: body.trim(),
             category,
+            status: 'active',
             description: description.trim() || undefined,
-            variables: extractVariables(body)
+            variables: extractVariables(body),
+            tags: []
         });
     };
 
@@ -488,11 +560,13 @@ const TemplateEditModal = ({
                                 onChange={(e) => setCategory(e.target.value)}
                                 className="w-full px-3 py-2 border dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-gray-800 dark:text-gray-200 focus:outline-none focus:ring-2 focus:ring-cyan-500"
                             >
-                                <option value="notification">Notificación</option>
-                                <option value="attendance">Asistencia</option>
                                 <option value="reminder">Recordatorio</option>
+                                <option value="attendance">Asistencia</option>
+                                <option value="announcement">Anuncio</option>
                                 <option value="welcome">Bienvenida</option>
-                                <option value="other">Otro</option>
+                                <option value="payment">Pago</option>
+                                <option value="event">Evento</option>
+                                <option value="general">General</option>
                             </select>
                         </div>
                         <div>

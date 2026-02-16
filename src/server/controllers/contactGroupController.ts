@@ -2,6 +2,7 @@ import { Request, Response } from 'express';
 import ContactGroupService from '../services/contactGroupService';
 import MessageQueueService from '../services/messageQueueService';
 import { ApiResponse, ContactGroup, BulkSendResult } from '../types';
+import { getErrorMessage } from '../utils/errorUtils';
 
 const contactGroupService = ContactGroupService.getInstance();
 const messageQueueService = MessageQueueService.getInstance();
@@ -16,10 +17,10 @@ export const getAllGroups = async (req: Request, res: Response): Promise<void> =
             success: true,
             data: groups
         } as ApiResponse<ContactGroup[]>);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         } as ApiResponse);
     }
 };
@@ -44,10 +45,10 @@ export const getGroupById = async (req: Request, res: Response): Promise<void> =
             success: true,
             data: group
         } as ApiResponse<ContactGroup>);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         } as ApiResponse);
     }
 };
@@ -74,10 +75,10 @@ export const createGroup = async (req: Request, res: Response): Promise<void> =>
             data: group,
             message: 'Group created successfully'
         } as ApiResponse<ContactGroup>);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         } as ApiResponse);
     }
 };
@@ -105,10 +106,10 @@ export const updateGroup = async (req: Request, res: Response): Promise<void> =>
             data: group,
             message: 'Group updated successfully'
         } as ApiResponse<ContactGroup>);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         } as ApiResponse);
     }
 };
@@ -133,10 +134,10 @@ export const deleteGroup = async (req: Request, res: Response): Promise<void> =>
             success: true,
             message: 'Group deleted successfully'
         } as ApiResponse);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         } as ApiResponse);
     }
 };
@@ -172,10 +173,10 @@ export const addContacts = async (req: Request, res: Response): Promise<void> =>
             data: group,
             message: `${contacts.length} contact(s) added`
         } as ApiResponse<ContactGroup>);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         } as ApiResponse);
     }
 };
@@ -202,10 +203,10 @@ export const removeContact = async (req: Request, res: Response): Promise<void> 
             data: group,
             message: 'Contact removed'
         } as ApiResponse<ContactGroup>);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         } as ApiResponse);
     }
 };
@@ -222,10 +223,10 @@ export const getGroupsForContact = async (req: Request, res: Response): Promise<
             success: true,
             data: groups
         } as ApiResponse<ContactGroup[]>);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         } as ApiResponse);
     }
 };
@@ -251,10 +252,10 @@ export const searchGroups = async (req: Request, res: Response): Promise<void> =
             success: true,
             data: groups
         } as ApiResponse<ContactGroup[]>);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         } as ApiResponse);
     }
 };
@@ -270,10 +271,10 @@ export const getStats = async (req: Request, res: Response): Promise<void> => {
             success: true,
             data: stats
         } as ApiResponse);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         } as ApiResponse);
     }
 };
@@ -315,10 +316,10 @@ export const sendBulkMessage = async (req: Request, res: Response): Promise<void
             } as BulkSendResult,
             message: `${messages.length} messages queued for delivery`
         } as ApiResponse<BulkSendResult>);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         } as ApiResponse);
     }
 };

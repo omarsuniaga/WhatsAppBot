@@ -45,7 +45,11 @@ const getSocket = () => {
         });
 
         socketInstance.on('connect_error', (error) => {
-            console.error('⚠️ Socket.io Connection Error:', error);
+            // Only log first few errors to avoid console spam
+            const attempts = (socketInstance as any)?._reconnectionAttempts ?? 0;
+            if (attempts <= 2) {
+                console.warn('⚠️ Socket.io Connection Error:', error.message || error);
+            }
         });
     }
     return socketInstance;

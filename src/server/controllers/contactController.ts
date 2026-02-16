@@ -1,5 +1,7 @@
-import { Request, Response } from 'express';
+﻿import { Request, Response } from 'express';
+import Logger from '../services/loggerService';
 import ContactService from '../services/contactService';
+import { getErrorMessage } from '../utils/errorUtils';
 
 export const searchContacts = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -20,11 +22,11 @@ export const searchContacts = async (req: Request, res: Response): Promise<void>
             success: true,
             data: contacts
         });
-    } catch (error: any) {
-        console.error('Error searching contacts:', error);
+    } catch (error: unknown) {
+        Logger.error('Error searching contacts:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -38,11 +40,11 @@ export const getAllContacts = async (req: Request, res: Response): Promise<void>
             success: true,
             data: contacts
         });
-    } catch (error: any) {
-        console.error('Error getting all contacts:', error);
+    } catch (error: unknown) {
+        Logger.error('Error getting all contacts:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -66,11 +68,12 @@ export const getContactInfo = async (req: Request, res: Response): Promise<void>
             success: true,
             data: contactInfo
         });
-    } catch (error: any) {
-        console.error('Error getting contact info:', error);
+    } catch (error: unknown) {
+        Logger.error('Error getting contact info:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
+

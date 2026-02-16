@@ -1,8 +1,10 @@
-/**
+﻿/**
  * Learning Controller - Handles API routes for learned responses
  */
 import { Request, Response } from 'express';
+import Logger from '../services/loggerService';
 import { BotOrchestrator } from '../../agents/BotOrchestrator';
+import { getErrorMessage } from '../utils/errorUtils';
 
 /**
  * Get pending reviews
@@ -19,11 +21,11 @@ export const getPending = async (req: Request, res: Response): Promise<void> => 
             data: pending,
             stats: learningService.getStats()
         });
-    } catch (error: any) {
-        console.error('Error getting pending reviews:', error);
+    } catch (error: unknown) {
+        Logger.error('Error getting pending reviews:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -44,11 +46,11 @@ export const getAll = async (req: Request, res: Response): Promise<void> => {
             data: responses,
             stats: learningService.getStats()
         });
-    } catch (error: any) {
-        console.error('Error getting learned responses:', error);
+    } catch (error: unknown) {
+        Logger.error('Error getting learned responses:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -76,11 +78,11 @@ export const getById = async (req: Request, res: Response): Promise<void> => {
             success: true,
             data: response
         });
-    } catch (error: any) {
-        console.error('Error getting learned response:', error);
+    } catch (error: unknown) {
+        Logger.error('Error getting learned response:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -136,18 +138,18 @@ export const approve = async (req: Request, res: Response): Promise<void> => {
                 }
             });
         } catch (faqError: any) {
-            console.error('Error creating FAQ from learned response:', faqError);
+            Logger.error('Error creating FAQ from learned response:', faqError);
             res.json({
                 success: true,
                 data: { learned },
                 warning: 'Response approved but FAQ creation failed: ' + faqError.message
             });
         }
-    } catch (error: any) {
-        console.error('Error approving learned response:', error);
+    } catch (error: unknown) {
+        Logger.error('Error approving learned response:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -183,11 +185,11 @@ export const reject = async (req: Request, res: Response): Promise<void> => {
             success: true,
             data: learned
         });
-    } catch (error: any) {
-        console.error('Error rejecting learned response:', error);
+    } catch (error: unknown) {
+        Logger.error('Error rejecting learned response:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -206,11 +208,11 @@ export const getSettings = async (req: Request, res: Response): Promise<void> =>
             success: true,
             data: settings
         });
-    } catch (error: any) {
-        console.error('Error getting learning settings:', error);
+    } catch (error: unknown) {
+        Logger.error('Error getting learning settings:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -220,22 +222,26 @@ export const getSettings = async (req: Request, res: Response): Promise<void> =>
  */
 export const updateSettings = async (req: Request, res: Response): Promise<void> => {
     try {
-        const { autoApprove, minConfidenceForAutoApprove } = req.body;
+        const { autoApprove, minConfidenceForAutoApprove, processExisting } = req.body;
 
         const orchestrator = BotOrchestrator.getInstance();
         const learningService = orchestrator.getLearningService();
 
-        learningService.updateSettings({ autoApprove, minConfidenceForAutoApprove });
+        learningService.updateSettings({ 
+            autoApprove, 
+            minConfidenceForAutoApprove,
+            processExisting 
+        });
 
         res.json({
             success: true,
             data: learningService.getSettings()
         });
-    } catch (error: any) {
-        console.error('Error updating learning settings:', error);
+    } catch (error: unknown) {
+        Logger.error('Error updating learning settings:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -254,11 +260,34 @@ export const getStats = async (req: Request, res: Response): Promise<void> => {
             success: true,
             data: stats
         });
-    } catch (error: any) {
-        console.error('Error getting learning stats:', error);
+    } catch (error: unknown) {
+        Logger.error('Error getting learning stats:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
+        });
+    }
+};
+
+/**
+ * Get auto-approve statistics
+ */
+export const getAutoStats = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const orchestrator = BotOrchestrator.getInstance();
+        const learningService = orchestrator.getLearningService();
+
+        const autoStats = learningService.getAutoApproveStats();
+
+        res.json({
+            success: true,
+            data: autoStats
+        });
+    } catch (error: unknown) {
+        Logger.error('Error getting auto-approve stats:', error);
+        res.status(500).json({
+            success: false,
+            error: getErrorMessage(error)
         });
     }
 };
@@ -279,11 +308,12 @@ export const cleanup = async (req: Request, res: Response): Promise<void> => {
             success: true,
             data: { removed }
         });
-    } catch (error: any) {
-        console.error('Error cleaning up learned responses:', error);
+    } catch (error: unknown) {
+        Logger.error('Error cleaning up learned responses:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
+

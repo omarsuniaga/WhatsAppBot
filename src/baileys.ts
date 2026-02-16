@@ -1,7 +1,7 @@
 import { EventEmitter } from 'events';
-import pino, { Logger } from 'pino'
-// @ts-ignore
+import pino, { Logger as PinoLogger } from 'pino'
 import NodeCache from 'node-cache'
+import Logger from './server/services/loggerService'
 import makeWASocket, {
     DisconnectReason,
     fetchLatestBaileysVersion,
@@ -14,7 +14,8 @@ import makeWASocket, {
     WAMessageKey
 } from '@whiskeysockets/baileys'
 import makeInMemoryStore from './store';
-import { readFileSync, existsSync, rmSync } from 'fs';
+import { readFileSync, existsSync, rmSync, readdirSync, statSync } from 'fs';
+import { join, isAbsolute } from 'path';
 
 import ffmpeg from 'fluent-ffmpeg';
 import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
@@ -22,7 +23,7 @@ import ffmpegInstaller from '@ffmpeg-installer/ffmpeg';
 import mime from 'mime-types';
 
 import utils from './utils';
-import { join } from 'path';
+import { getErrorMessage } from './server/utils/errorUtils';
 
 
 
@@ -60,6 +61,14 @@ export class BaileysClass extends EventEmitter {
     private sock: any;
     private NAME_DIR_SESSION: string;
     private plugin: boolean;
+    private storeInterval: ReturnType<typeof setInterval> | null = null;
+    private reconnectTimeout: ReturnType<typeof setTimeout> | null = null;
+    private reconnectAttempts: number = 0;
+    private readonly MAX_RECONNECT_DELAY_MS = 60_000; // 1 minute max
+    private readonly MAX_RECONNECT_ATTEMPTS = 5; // Reduced: stop sooner to avoid ban risk
+    private lastError: string | null = null;
+    private sessionCorruptionDetected: boolean = false;
+    private intentionalDisconnect: boolean = false; // Track intentional disconnects
 
     constructor(args = {}) {
 
@@ -67,8 +76,18 @@ export class BaileysClass extends EventEmitter {
         this.vendor = null;
         this.store = null;
         this.globalVendorArgs = { name: `bot`, usePairingCode: false, phoneNumber: null, gifPlayback: false, dir: './', ...args };
-        this.NAME_DIR_SESSION = `${this.globalVendorArgs.dir}${this.globalVendorArgs.name}_sessions`;
-        this.initBailey();
+        const sessionDirName = `${this.globalVendorArgs.name}_sessions`;
+        const configuredBaseDir = this.globalVendorArgs.dir || './';
+        this.NAME_DIR_SESSION = isAbsolute(configuredBaseDir)
+            ? join(configuredBaseDir, sessionDirName)
+            : join(process.cwd(), configuredBaseDir, sessionDirName);
+
+        // FIX: Cannot await in constructor — catch errors to prevent unhandled rejections
+        this.initBailey().catch((err: any) => {
+            Logger.error(`[Baileys] initBailey() failed during construction: ${err.message}`);
+            this.lastError = err.message;
+            this.emit('auth_failure', err);
+        });
 
         // is plugin?
         const err = new Error();
@@ -89,81 +108,281 @@ export class BaileysClass extends EventEmitter {
     getInstance = (): any => this.vendor;
 
     initBailey = async (): Promise<void> => {
-
-        const logger: Logger = pino({ level: this.globalVendorArgs.debug ? 'debug' : 'fatal' })
-        const { state, saveCreds } = await useMultiFileAuthState(this.NAME_DIR_SESSION);
-        const { version, isLatest } = await fetchLatestBaileysVersion()
-
-        if (this.globalVendorArgs.debug) console.log(`using WA v${version.join('.')}, isLatest: ${isLatest}`)
-
-        this.store = makeInMemoryStore({ logger })
-        const storePath = `${this.NAME_DIR_SESSION}/baileys_store.json`;
-        if (existsSync(storePath)) {
-            this.store.readFromFile(storePath);
-        }
-        setInterval(() => {
-            this.store.writeToFile(storePath);
-        }, 10_000);
-
         try {
-            this.setUpBaileySock({ version, logger, state, saveCreds });
-        } catch (e) {
-            this.emit('auth_failure', e);
+            const logger: PinoLogger = pino({ level: this.globalVendorArgs.debug ? 'debug' : 'fatal' });
+
+            // Validate session directory before loading
+            const sessionPath = this.NAME_DIR_SESSION;
+            if (existsSync(sessionPath)) {
+                const isValid = await this.validateSessionFiles(sessionPath);
+                if (!isValid) {
+                    if (!this.sessionCorruptionDetected) {
+                        Logger.warn(`[Baileys] Invalid session files detected during init, clearing...`);
+                    } else {
+                        Logger.info(`[Baileys] Session still invalid, retrying cleanup...`);
+                    }
+                    this.sessionCorruptionDetected = true;
+                    await this.clearSessionAndRestart();
+                    return;
+                }
+            }
+
+            const { state, saveCreds } = await useMultiFileAuthState(this.NAME_DIR_SESSION);
+            const { version, isLatest } = await fetchLatestBaileysVersion();
+
+            if (this.globalVendorArgs.debug) {
+                Logger.info(`[Baileys] Using WA v${version.join('.')}, isLatest: ${isLatest}`);
+            }
+
+            this.store = makeInMemoryStore({ logger });
+            const storePath = `${this.NAME_DIR_SESSION}/baileys_store.json`;
+
+            // Validate store file before loading
+            if (existsSync(storePath)) {
+                try {
+                    this.store.readFromFile(storePath);
+                    Logger.info(`[Baileys] Store loaded successfully from ${storePath}`);
+                } catch (storeError: any) {
+                    Logger.warn(`[Baileys] Store file corrupted, starting fresh: ${storeError.message}`);
+                    // Store will start fresh if file is corrupted
+                }
+            }
+
+            // Clear previous interval to prevent accumulation on reconnections
+            if (this.storeInterval) {
+                clearInterval(this.storeInterval);
+            }
+            // Save interval: 5 minutes (increased from 10s to reduce I/O on large files)
+            this.storeInterval = setInterval(() => {
+                try {
+                    this.pruneStore(); // Prune before saving to keep file size small
+                    this.store.writeToFile(storePath);
+                    Logger.debug(`[Baileys] Store saved and pruned successfully to ${storePath}`);
+                } catch (writeError: any) {
+                    Logger.error(`[Baileys] Failed to write store: ${writeError.message}`);
+                }
+            }, 5 * 60_000);
+
+            try {
+                await this.setUpBaileySock({ version, logger, state, saveCreds });
+            } catch (e: any) {
+                // Check for MAC/corruption errors during socket setup
+                if (this.detectSessionCorruption(e)) {
+                    Logger.warn(`[Baileys] Corruption detected during setup, clearing session...`);
+                    await this.clearSessionAndRestart();
+                } else {
+                    Logger.error(`[Baileys] Socket setup failed: ${e.message}`);
+                    this.emit('auth_failure', e);
+                }
+            }
+        } catch (initError: any) {
+            Logger.error(`[Baileys] Initialization failed: ${initError.message}`);
+
+            // Check if this is a corruption error
+            if (this.detectSessionCorruption(initError)) {
+                await this.clearSessionAndRestart();
+            } else {
+                this.emit('auth_failure', initError);
+            }
         }
     }
 
     setUpBaileySock = async ({ version, logger, state, saveCreds }) => {
-        this.sock = makeWASocket({
-            version,
-            logger,
-            auth: {
-                creds: state.creds,
-                keys: makeCacheableSignalKeyStore(state.keys, logger),
-            },
-            browser: Browsers.macOS('Desktop'),
-            msgRetryCounterCache,
-            generateHighQualityLinkPreview: true,
-            getMessage: this.getMessage,
-            syncFullHistory: true,
-        })
-
-        this.store?.bind(this.sock.ev)
-
-        if (this.globalVendorArgs.usePairingCode) {
-            if (this.globalVendorArgs.phoneNumber) {
-                await this.sock.waitForConnectionUpdate((update) => !!update.qr)
-                const code = await this.sock.requestPairingCode(this.globalVendorArgs.phoneNumber)
-                if (this.plugin) {
-                    this.emit('require_action', {
-                        instructions: [
-                            `Acepta la notificación del WhatsApp ${this.globalVendorArgs.phoneNumber} en tu celular 👌`,
-                            `El token para la vinculación es: ${code}`,
-                            `Necesitas ayuda: https://link.codigoencasa.com/DISCORD`,
-                        ],
-                    })
-                } else {
-                    this.emit('pairing_code', code);
+        try {
+            // MEMORY LEAK FIX: Remove all event listeners from previous socket before creating new one
+            if (this.sock?.ev) {
+                try {
+                    this.sock.ev.removeAllListeners();
+                    Logger.info('[Baileys] Cleaned up previous socket event listeners');
+                } catch (_e) {
+                    // Ignore if old socket is already disposed
                 }
-            } else {
-                this.emit('auth_failure', 'phoneNumber is empty')
             }
+
+            this.sock = makeWASocket({
+                version,
+                logger,
+                auth: {
+                    creds: state.creds,
+                    keys: makeCacheableSignalKeyStore(state.keys, logger),
+                },
+                browser: Browsers.macOS('Desktop'),
+                msgRetryCounterCache,
+                generateHighQualityLinkPreview: true,
+                getMessage: this.getMessage,
+                syncFullHistory: false, // CRITICAL: false prevents massive data transfer on reconnect
+                // Connection tuning for stability
+                retryRequestDelayMs: 500, // Slightly slower retries to reduce server pressure
+                maxMsgRetryCount: 3, // Fewer retries per message
+                connectTimeoutMs: 60_000,
+                keepAliveIntervalMs: 30_000, // 30s keep-alive (less aggressive)
+            });
+
+            this.store?.bind(this.sock.ev);
+
+            if (this.globalVendorArgs.usePairingCode) {
+                if (this.globalVendorArgs.phoneNumber) {
+                    await this.sock.waitForConnectionUpdate((update) => !!update.qr);
+                    const code = await this.sock.requestPairingCode(this.globalVendorArgs.phoneNumber);
+                    if (this.plugin) {
+                        this.emit('require_action', {
+                            instructions: [
+                                `Acepta la notificación del WhatsApp ${this.globalVendorArgs.phoneNumber} en tu celular 👌`,
+                                `El token para la vinculación es: ${code}`,
+                                `Necesitas ayuda: https://link.codigoencasa.com/DISCORD`,
+                            ],
+                        });
+                    } else {
+                        this.emit('pairing_code', code);
+                    }
+                } else {
+                    this.emit('auth_failure', 'phoneNumber is empty');
+                }
+            }
+
+            // Enhanced event listeners with error handling
+            this.sock.ev.on('connection.update', this.handleConnectionUpdate);
+
+            this.sock.ev.on('creds.update', async (update) => {
+                try {
+                    await saveCreds();
+                } catch (credsError: any) {
+                    Logger.error(`[Baileys] Failed to save credentials: ${credsError.message}`);
+                    // Detect corruption in credentials saving
+                    if (this.detectSessionCorruption(credsError)) {
+                        await this.clearSessionAndRestart();
+                    }
+                }
+            });
+
+            // Add error listener for socket-level errors
+            this.sock.ev.on('error', (error: any) => {
+                Logger.error(`[Baileys] Socket error: ${error.message}`);
+                if (this.detectSessionCorruption(error)) {
+                    // FIX: Properly await the async cleanup to prevent race conditions
+                    this.clearSessionAndRestart().catch((cleanupErr: any) => {
+                        Logger.error(`[Baileys] clearSessionAndRestart failed after socket error: ${cleanupErr.message}`);
+                    });
+                }
+            });
+
+        } catch (socketError: any) {
+            Logger.error(`[Baileys] Socket creation failed: ${socketError.message}`);
+            throw socketError;
+        }
+    }
+
+    /**
+     * Detect and handle session corruption including MAC errors
+     */
+    private detectSessionCorruption = (error: any): boolean => {
+        const errorMessage = error?.message?.toLowerCase() || '';
+        const errorStack = error?.stack?.toLowerCase() || '';
+
+        // MAC error patterns
+        const macErrorPatterns = [
+            'bad mac',
+            'mac verification failed',
+            'invalid mac',
+            'mac mismatch',
+            'corrupt',
+            'corrupted',
+            'integrity check failed',
+            'signature verification failed',
+            'libsignal'
+        ];
+
+        // Session corruption patterns
+        const corruptionPatterns = [
+            'session file corrupted',
+            'auth state corrupted',
+            'invalid auth state',
+            'malformed json',
+            'json parse error',
+            'unexpected end of json input',
+            'failed to decrypt'
+        ];
+
+        const isMacError = macErrorPatterns.some(pattern => errorMessage.includes(pattern) || errorStack.includes(pattern));
+        const isCorruptionError = corruptionPatterns.some(pattern => errorMessage.includes(pattern) || errorStack.includes(pattern));
+
+        if (isMacError || isCorruptionError) {
+            Logger.error(`[Baileys] Session corruption detected: ${error.message}`);
+            this.lastError = error.message;
+            this.sessionCorruptionDetected = true;
+            return true;
         }
 
-        this.sock.ev.on('connection.update', this.handleConnectionUpdate);
-        this.sock.ev.on('creds.update', saveCreds)
-    }
+        return false;
+    };
 
     handleConnectionUpdate = async (update: any): Promise<void> => {
         const { connection, lastDisconnect, qr } = update;
         const statusCode = lastDisconnect?.error?.output?.statusCode;
+        const error = lastDisconnect?.error;
 
         if (connection === 'close') {
-            if (statusCode !== DisconnectReason.loggedOut) this.initBailey();
-            if (statusCode === DisconnectReason.loggedOut) await this.clearSessionAndRestart();
+            this.vendor = undefined; // Clear vendor on disconnect
+
+            // If this was an intentional disconnect, do NOT reconnect
+            if (this.intentionalDisconnect) {
+                Logger.info(`[Baileys] Intentional disconnect — not reconnecting`);
+                this.intentionalDisconnect = false;
+                this.emit('disconnected', { intentional: true });
+                return;
+            }
+
+            this.emit('disconnected', { intentional: false });
+
+            // Check for session corruption including MAC errors
+            const isCorrupted = this.detectSessionCorruption(error);
+
+            // Only clear session on explicit logout or confirmed corruption
+            if (statusCode === DisconnectReason.loggedOut) {
+                Logger.warn(`[Baileys] Logged out by WhatsApp, clearing session...`);
+                this.reconnectAttempts = 0;
+                await this.clearSessionAndRestart();
+            } else if (isCorrupted) {
+                Logger.warn(`[Baileys] Session corruption detected, clearing and restarting...`);
+                this.reconnectAttempts = 0;
+                await this.clearSessionAndRestart();
+            } else if (this.reconnectAttempts >= this.MAX_RECONNECT_ATTEMPTS) {
+                // CRITICAL FIX: Do NOT clear session on max attempts.
+                // Just STOP reconnecting and notify the user. They can manually reconnect.
+                // Clearing session forces a new QR scan which can trigger a WhatsApp ban.
+                Logger.error(`[Baileys] Max reconnection attempts (${this.MAX_RECONNECT_ATTEMPTS}) reached. Stopping to prevent ban risk. Use manual reconnect.`);
+                this.lastError = `Max reconnection attempts reached (status: ${statusCode || 'unknown'})`;
+                this.emit('max_reconnect_reached', {
+                    attempts: this.reconnectAttempts,
+                    lastStatusCode: statusCode,
+                    lastError: error?.message || 'unknown'
+                });
+                // Do NOT reset reconnectAttempts — keep them high so we don't auto-reconnect
+            } else {
+                // Exponential backoff: 2s, 4s, 8s, 16s, 32s, 60s max
+                const baseDelay = 2000; // Start at 2s (was 1s)
+                const delay = Math.min(
+                    baseDelay * Math.pow(2, this.reconnectAttempts),
+                    this.MAX_RECONNECT_DELAY_MS
+                );
+                this.reconnectAttempts++;
+                Logger.info(`[Baileys] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.MAX_RECONNECT_ATTEMPTS})`);
+                // FIX: Handle errors from delayed reconnect to prevent silent failures
+                this.reconnectTimeout = setTimeout(() => {
+                    this.initBailey().catch((err: any) => {
+                        Logger.error(`[Baileys] Reconnect initBailey() failed: ${err.message}`);
+                        this.emit('auth_failure', err);
+                    });
+                }, delay);
+            }
         }
 
         if (connection === 'open') {
+            this.reconnectAttempts = 0; // Reset on successful connection
+            this.sessionCorruptionDetected = false;
+            this.lastError = null;
             this.vendor = this.sock;
+            Logger.info(`[Baileys] Bot connected! (Session: ${this.globalVendorArgs.name})`);
             this.initBusEvents(this.sock);
             this.emit('ready', true);
         }
@@ -181,41 +400,202 @@ export class BaileysClass extends EventEmitter {
         }
     }
 
-    clearSessionAndRestart = async (): Promise<void> => {
-        const PATH_BASE = join(process.cwd(), this.NAME_DIR_SESSION);
+    /**
+     * Prune the in-memory store to prevent huge session files.
+     * Keeps only the latest N messages per chat.
+     */
+    private pruneStore = (): void => {
+        if (!this.store?.messages) return;
 
-        // 1. Close socket to release locks
+        const MAX_MESSAGES_PER_CHAT = 500;
+        let prunedChats = 0;
+        let totalRemoved = 0;
+
         try {
+            this.store.messages.forEach((chatMessages: any, jid: string) => {
+                if (chatMessages?.array?.length > MAX_MESSAGES_PER_CHAT) {
+                    const originalCount = chatMessages.array.length;
+                    // Splice to keep only the last MAX_MESSAGES_PER_CHAT
+                    chatMessages.array = chatMessages.array.slice(-MAX_MESSAGES_PER_CHAT);
+                    totalRemoved += (originalCount - chatMessages.array.length);
+                    prunedChats++;
+                }
+            });
+
+            if (prunedChats > 0) {
+                Logger.info(`[Baileys] Store pruned: cleaned ${prunedChats} chats, removed ${totalRemoved} old messages`);
+            }
+        } catch (error: any) {
+            Logger.error(`[Baileys] Failed to prune store: ${error.message}`);
+        }
+    }
+
+    /**
+     * Validate session file integrity before loading
+     */
+    private validateSessionFiles = async (sessionPath: string): Promise<boolean> => {
+        try {
+            if (!existsSync(sessionPath)) return true; // No files to validate
+
+            const files = readdirSync(sessionPath);
+            let totalSize = 0;
+            let hasCredsFile = false;
+            let credsRegistered = false;
+            let keyFileCount = 0;
+
+            for (const file of files) {
+                const filePath = join(sessionPath, file);
+                try {
+                    const stats = statSync(filePath);
+                    totalSize += stats.size;
+
+                    if (file === 'creds.json') {
+                        hasCredsFile = true;
+                    }
+                    if (file.startsWith('session-') && file.endsWith('.json')) {
+                        keyFileCount++;
+                    }
+
+                    // Check for empty files or unusually large files
+                    if (stats.size === 0) {
+                        // Empty store file can happen during first boot; don't treat as corruption.
+                        if (file === 'baileys_store.json') {
+                            continue;
+                        }
+                        Logger.warn(`[Baileys] Empty session file detected: ${file}`);
+                        return false;
+                    }
+
+                    if (stats.size > 10 * 1024 * 1024) { // 10MB limit
+                        Logger.warn(`[Baileys] Oversized session file detected: ${file} (${stats.size} bytes)`);
+                        return false;
+                    }
+
+                    // Try to read and parse JSON files
+                    if (file.endsWith('.json')) {
+                        const content = readFileSync(filePath, 'utf-8');
+                        const parsed = JSON.parse(content);
+                        if (file === 'creds.json') {
+                            credsRegistered = !!parsed?.registered;
+                        }
+                    }
+                } catch (parseError: any) {
+                    Logger.error(`[Baileys] Invalid session file ${file}: ${parseError.message}`);
+                    return false;
+                }
+            }
+
+            // Fresh/unregistered session is expected to be small and should not be considered corruption.
+            if (hasCredsFile && !credsRegistered) {
+                Logger.info(`[Baileys] Session is unregistered (awaiting QR scan). Keeping current auth state.`);
+                return true;
+            }
+
+            // Registered session should have credential + signal key files.
+            if (hasCredsFile && credsRegistered && keyFileCount === 0) {
+                Logger.warn(`[Baileys] Registered session missing signal key files, treating as corrupted.`);
+                return false;
+            }
+
+            // Keep heuristic but only for registered sessions.
+            if (hasCredsFile && credsRegistered && totalSize < 100 && files.length > 0) {
+                Logger.warn(`[Baileys] Registered session directory too small (${totalSize} bytes), likely corrupted`);
+                return false;
+            }
+
+            return true;
+        } catch (error: unknown) {
+            Logger.error(`[Baileys] Session validation error: ${getErrorMessage(error)}`);
+            return false;
+        }
+    };
+
+    clearSessionAndRestart = async (): Promise<void> => {
+        const PATH_BASE = this.NAME_DIR_SESSION;
+
+        Logger.info(`[Baileys] Starting session cleanup process...`);
+
+        // 0. Cancel any pending reconnect timeout to prevent race conditions
+        if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
+            this.reconnectTimeout = null;
+        }
+
+        // Clean up store interval during session reset
+        if (this.storeInterval) {
+            clearInterval(this.storeInterval);
+            this.storeInterval = null;
+        }
+
+        // 1. Close socket and remove listeners to release locks
+        try {
+            if (this.sock?.ev) {
+                try {
+                    this.sock.ev.removeAllListeners();
+                } catch (_e) { /* ignore */ }
+            }
             if (this.sock) {
                 this.sock.end(undefined);
                 this.sock = undefined;
                 this.vendor = undefined;
             }
-        } catch (e) {
-            console.error('Error closing socket:', e);
+        } catch (e: any) {
+            Logger.error(`[Baileys] Error closing socket: ${e.message}`);
         }
 
         // 2. Wait for locks to release
         await new Promise(resolve => setTimeout(resolve, 2000));
 
-        // 3. Delete session directory with retry
-        const maxRetries = 3;
+        // 3. Enhanced session cleanup with validation
+        const maxRetries = 5;
+        let sessionCleared = false;
+
         for (let i = 0; i < maxRetries; i++) {
             try {
                 if (existsSync(PATH_BASE)) {
-                    rmSync(PATH_BASE, { recursive: true, force: true });
+                    // First validate before clearing
+                    const isValid = await this.validateSessionFiles(PATH_BASE);
+                    if (!isValid || this.sessionCorruptionDetected) {
+                        Logger.warn(`[Baileys] Clearing corrupted session (attempt ${i + 1})`);
+                        rmSync(PATH_BASE, { recursive: true, force: true });
+                        sessionCleared = true;
+                    } else {
+                        Logger.info(`[Baileys] Session files are valid, not clearing`);
+                        sessionCleared = true;
+                    }
+                } else {
+                    Logger.info(`[Baileys] No session directory found, starting fresh`);
+                    sessionCleared = true;
                 }
-                console.log(`Session cleared successfully on attempt ${i + 1}`);
-                break;
-            } catch (error: any) {
-                console.error(`Error clearing session (attempt ${i + 1}):`, error.message);
+
+                if (sessionCleared) {
+                    Logger.info(`[Baileys] Session cleared successfully on attempt ${i + 1}`);
+                    this.sessionCorruptionDetected = false; // Reset corruption flag
+                    this.lastError = null;
+                    break;
+                }
+            } catch (error: unknown) {
+                Logger.error(`[Baileys] Error clearing session (attempt ${i + 1}): ${getErrorMessage(error)}`);
                 if (i < maxRetries - 1) {
-                    await new Promise(resolve => setTimeout(resolve, 1000));
+                    await new Promise(resolve => setTimeout(resolve, 1000 * (i + 1))); // Progressive wait
                 }
             }
         }
 
-        this.initBailey();
+        if (!sessionCleared) {
+            Logger.error(`[Baileys] Failed to clear session after ${maxRetries} attempts`);
+            this.emit('auth_failure', new Error('Failed to clear corrupted session'));
+            return;
+        }
+
+        // 4. Restart with fresh session
+        try {
+            Logger.info(`[Baileys] Restarting with fresh session...`);
+            await this.initBailey();
+        } catch (initError: any) {
+            Logger.error(`[Baileys] Failed to initialize after session cleanup: ${initError.message}`);
+            this.emit('auth_failure', initError);
+        }
     }
 
     busEvents = (): any[] => [
@@ -320,11 +700,27 @@ export class BaileysClass extends EventEmitter {
     ]
 
     initBusEvents = (_sock: any): void => {
-        this.vendor = _sock;
-        const listEvents = this.busEvents();
+        try {
+            // Remove all previous listeners to prevent duplicates on reconnect
+            if (this.vendor && this.vendor.ev && this.vendor !== _sock) {
+                try {
+                    this.vendor.ev.removeAllListeners();
+                } catch (_e) {
+                    // Ignore if old vendor is already disposed
+                }
+            }
 
-        for (const { event, func } of listEvents) {
-            this.vendor.ev.on(event, func);
+            this.vendor = _sock;
+            const listEvents = this.busEvents();
+
+            for (const { event, func } of listEvents) {
+                this.vendor.ev.on(event, func);
+            }
+
+            Logger.info('[Baileys] Event listeners initialized successfully');
+        } catch (eventError: any) {
+            Logger.error(`[Baileys] Failed to initialize event listeners: ${eventError.message}`);
+            throw eventError;
         }
     }
 
@@ -404,14 +800,103 @@ export class BaileysClass extends EventEmitter {
     }
 
     /**
+     * Check if the bot is currently connected
+     */
+    isReady = (): boolean => {
+        // Debug connection state
+        const ready = !!this.vendor;
+        // const connectionState = this.sock?.state?.connection?.state; // This might be wrong
+        // Logger.info(`[Baileys Debug] isReady check: vendor=${!!this.vendor}, sock=${!!this.sock}`);
+        return ready;
+    }
+
+    /**
+     * Get connection status and health information
+     */
+    getConnectionHealth = () => {
+        return {
+            isReady: this.isReady(),
+            reconnectAttempts: this.reconnectAttempts,
+            lastError: this.lastError,
+            sessionCorruptionDetected: this.sessionCorruptionDetected,
+            connectionState: 'unknown', // Removed unreliable state check
+            hasVendor: !!this.vendor,
+            hasStore: !!this.store
+        };
+    }
+
+    /**
+     * Force session cleanup and restart (use only for confirmed corruption)
+     */
+    forceSessionReset = async (): Promise<void> => {
+        Logger.warn('[Baileys] Force session reset requested');
+        this.sessionCorruptionDetected = true;
+        await this.clearSessionAndRestart();
+    }
+
+    /**
+     * Gracefully disconnect without clearing session.
+     * The session files are preserved so reconnecting doesn't require a new QR scan.
+     */
+    gracefulDisconnect = async (): Promise<void> => {
+        Logger.info('[Baileys] Graceful disconnect requested');
+        this.intentionalDisconnect = true;
+        this.reconnectAttempts = 0;
+
+        // Cancel any pending reconnect timeout
+        if (this.reconnectTimeout) {
+            clearTimeout(this.reconnectTimeout);
+            this.reconnectTimeout = null;
+        }
+
+        try {
+            // Remove event listeners before closing to prevent duplicate handlers
+            if (this.sock?.ev) {
+                try {
+                    this.sock.ev.removeAllListeners();
+                } catch (_e) { /* ignore */ }
+            }
+            if (this.sock) {
+                this.sock.end(undefined);
+                this.sock = undefined;
+                this.vendor = undefined;
+            }
+        } catch (e: any) {
+            Logger.error(`[Baileys] Error during graceful disconnect: ${e.message}`);
+        }
+
+        // Clean up store interval
+        if (this.storeInterval) {
+            clearInterval(this.storeInterval);
+            this.storeInterval = null;
+        }
+
+        Logger.info('[Baileys] Gracefully disconnected. Session preserved.');
+    }
+
+    /**
+     * Manually reconnect after a disconnect or after max reconnect attempts were reached.
+     */
+    reconnect = async (): Promise<void> => {
+        Logger.info('[Baileys] Manual reconnect requested');
+        this.intentionalDisconnect = false;
+        this.reconnectAttempts = 0;
+        this.lastError = null;
+        await this.initBailey();
+    }
+
+    /**
      *
      * @param {string} number
      * @param {string} message
      * @returns
      */
     sendText = async (number: string, message: string): Promise<any> => {
+        if (!this.isReady()) {
+            throw new Error('Connection is not ready');
+        }
         const numberClean = utils.formatPhone(number)
-        return this.vendor.sendMessage(numberClean, { text: message })
+        return this.sock.sendMessage(numberClean, { text: message })
     }
 
     /**
@@ -597,7 +1082,7 @@ export class BaileysClass extends EventEmitter {
         }
     }
 
-    fetchMessageHistory = async (jid: string, count: number = 50): Promise<any[]> => {
+    fetchMessageHistory = async (jid: string, count: number = 50, beforeMessageId?: string): Promise<any[]> => {
         if (!this.vendor || !this.store) {
             console.log('Vendor or store not available for fetchMessageHistory');
             return [];
@@ -613,10 +1098,25 @@ export class BaileysClass extends EventEmitter {
             ]));
 
             for (const tryJid of possibleJids) {
-                const storeMessages = this.store.messages[tryJid];
+                const storeMessages = this.store.messages instanceof Map ? this.store.messages.get(tryJid) : this.store.messages[tryJid];
                 if (storeMessages?.array?.length > 0) {
                     console.log(`Found ${storeMessages.array.length} messages for ${tryJid}`);
-                    return storeMessages.array.slice(-count);
+
+                    let messages = storeMessages.array;
+
+                    // If beforeMessageId is provided, find the index and return messages before it
+                    if (beforeMessageId) {
+                        const messageIndex = messages.findIndex((msg: any) => msg.key?.id === beforeMessageId);
+                        if (messageIndex > 0) {
+                            // Return messages before the specified message
+                            const startIndex = Math.max(0, messageIndex - count);
+                            return messages.slice(startIndex, messageIndex);
+                        }
+                        // If message not found, return last count messages
+                        return messages.slice(-count);
+                    }
+
+                    return messages.slice(-count);
                 }
             }
             return null;
@@ -637,12 +1137,14 @@ export class BaileysClass extends EventEmitter {
 
             // 1. Use chatModify to trigger history sync
             try {
+                // Generate a random ID for the message key to avoid "Incomplete key" error
+                const randomId = Math.random().toString(36).substring(2, 12).toUpperCase();
                 await this.vendor.chatModify(
-                    { lastMessages: [{ key: { remoteJid: canonicalJid }, messageTimestamp: Math.floor(Date.now() / 1000) }], clear: false },
+                    { lastMessages: [{ key: { remoteJid: canonicalJid, fromMe: true, id: randomId }, messageTimestamp: Math.floor(Date.now() / 1000) }], clear: false },
                     canonicalJid
                 );
-                if (this.globalVendorArgs.debug) console.log(`ChatModify sent for ${canonicalJid}`);
-            } catch (chatModifyError) {
+                if (this.globalVendorArgs.debug) console.log(`ChatModify sent for ${canonicalJid} with ID ${randomId}`);
+            } catch (chatModifyError: any) {
                 if (this.globalVendorArgs.debug) console.log(`ChatModify failed for ${canonicalJid}:`, chatModifyError.message);
             }
 
@@ -673,8 +1175,8 @@ export class BaileysClass extends EventEmitter {
             if (this.globalVendorArgs.debug) console.log(`No messages found for ${jid} after all attempts`);
             return [];
 
-        } catch (error: any) {
-            console.error(`Error in fetchMessageHistory for ${jid}:`, error.message);
+        } catch (error: unknown) {
+            console.error(`Error in fetchMessageHistory for ${jid}:`, getErrorMessage(error));
             return getFromStore() || [];
         }
     }
@@ -757,16 +1259,15 @@ export class BaileysClass extends EventEmitter {
 
             // Update chat unread count in store
             if (this.store?.chats) {
-                const chat = this.store.chats.get?.(canonicalJid) ||
-                    (this.store.chats[canonicalJid]);
+                const chat = this.store.chats.get?.(canonicalJid);
                 if (chat) {
                     chat.unreadCount = 0;
                 }
             }
 
             return true;
-        } catch (error: any) {
-            console.error(`Error marking messages as read for ${jid}:`, error.message);
+        } catch (error: unknown) {
+            console.error(`Error marking messages as read for ${jid}:`, getErrorMessage(error));
             return false;
         }
     }
@@ -786,7 +1287,7 @@ export class BaileysClass extends EventEmitter {
         ];
 
         for (const tryJid of possibleJids) {
-            const storeMessages = this.store?.messages?.[tryJid]?.array;
+            const storeMessages = this.store?.messages?.get?.(tryJid)?.array;
             if (storeMessages && storeMessages.length > 0) {
                 return storeMessages.filter((msg: any) =>
                     msg.key?.fromMe === false &&

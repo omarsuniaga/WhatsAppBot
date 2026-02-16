@@ -1,9 +1,12 @@
-/**
+﻿/**
  * Alert Controller - Handles API routes for pending alerts
  */
 import { Request, Response } from 'express';
+import Logger from '../services/loggerService';
 import { BotOrchestrator } from '../../agents/BotOrchestrator';
 import BotService from '../services/botService';
+import MessageQueueService from '../services/messageQueueService';
+import { getErrorMessage } from '../utils/errorUtils';
 
 /**
  * Get all pending alerts
@@ -14,7 +17,7 @@ export const getAlerts = async (req: Request, res: Response): Promise<void> => {
         const alertService = orchestrator.getAlertService();
 
         const status = req.query.status as string;
-        
+
         let alerts;
         if (status === 'pending') {
             alerts = alertService.getActiveAlerts();
@@ -28,11 +31,11 @@ export const getAlerts = async (req: Request, res: Response): Promise<void> => {
             data: alerts,
             stats: alertService.getStats()
         });
-    } catch (error: any) {
-        console.error('Error getting alerts:', error);
+    } catch (error: unknown) {
+        Logger.error('Error getting alerts:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -60,11 +63,11 @@ export const getAlert = async (req: Request, res: Response): Promise<void> => {
             success: true,
             data: alert
         });
-    } catch (error: any) {
-        console.error('Error getting alert:', error);
+    } catch (error: unknown) {
+        Logger.error('Error getting alert:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -84,11 +87,11 @@ export const getAlertsByChat = async (req: Request, res: Response): Promise<void
             success: true,
             data: alerts
         });
-    } catch (error: any) {
-        console.error('Error getting alerts by chat:', error);
+    } catch (error: unknown) {
+        Logger.error('Error getting alerts by chat:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -99,7 +102,21 @@ export const getAlertsByChat = async (req: Request, res: Response): Promise<void
 export const respondToAlert = async (req: Request, res: Response): Promise<void> => {
     try {
         const { id } = req.params;
-        const { response, shouldLearn = true, respondedBy = 'admin' } = req.body;
+        const {
+            response,
+            shouldLearn = true,
+            respondedBy = 'admin',
+            deliveryMode = 'now',
+            scheduledFor
+        } = req.body;
+
+        if (!['now', 'scheduled', 'manual'].includes(deliveryMode)) {
+            res.status(400).json({
+                success: false,
+                error: 'deliveryMode must be one of: now, scheduled, manual'
+            });
+            return;
+        }
 
         if (!response || !response.trim()) {
             res.status(400).json({
@@ -133,10 +150,51 @@ export const respondToAlert = async (req: Request, res: Response): Promise<void>
             return;
         }
 
-        // Send the response to the customer via WhatsApp
+        let messageSent = false;
+        let scheduled = false;
+        let queueMessageId: string | null = null;
+
+        // Deliver the response according to selected mode
         try {
-            const botService = BotService.getInstance();
-            await botService.sendText(alert.chatJid, response.trim());
+            if (deliveryMode === 'scheduled') {
+                if (!scheduledFor) {
+                    res.status(400).json({
+                        success: false,
+                        error: 'scheduledFor is required when deliveryMode is scheduled'
+                    });
+                    return;
+                }
+
+                const scheduleDate = new Date(scheduledFor);
+                if (Number.isNaN(scheduleDate.getTime())) {
+                    res.status(400).json({
+                        success: false,
+                        error: 'Invalid scheduledFor date'
+                    });
+                    return;
+                }
+                if (scheduleDate.getTime() <= Date.now()) {
+                    res.status(400).json({
+                        success: false,
+                        error: 'scheduledFor must be in the future'
+                    });
+                    return;
+                }
+
+                const queueService = MessageQueueService.getInstance();
+                const queued = queueService.enqueue(
+                    'text',
+                    alert.chatJid,
+                    { message: response.trim() },
+                    { scheduledFor: scheduleDate, targetType: 'individual', priority: 2 }
+                );
+                scheduled = true;
+                queueMessageId = queued.id;
+            } else if (deliveryMode === 'now') {
+                const botService = BotService.getInstance();
+                await botService.sendText(alert.chatJid, response.trim());
+                messageSent = true;
+            }
 
             // Emit WebSocket event
             const io = (req as any).io;
@@ -145,12 +203,18 @@ export const respondToAlert = async (req: Request, res: Response): Promise<void>
                     alertId: id,
                     chatJid: alert.chatJid,
                     response: response.trim(),
-                    learnedId: result.learnedId
+                    learnedId: result.learnedId,
+                    deliveryMode,
+                    scheduledFor: scheduled ? scheduledFor : null,
+                    queueMessageId
                 });
             }
         } catch (sendError) {
-            console.error('Error sending response to WhatsApp:', sendError);
-            // Don't fail the request, the alert was still processed
+            Logger.error('Error sending response to WhatsApp:', sendError);
+            if (deliveryMode === 'now') {
+                // Keep HTTP success to preserve alert state, but return explicit send status.
+                messageSent = false;
+            }
         }
 
         res.json({
@@ -158,14 +222,16 @@ export const respondToAlert = async (req: Request, res: Response): Promise<void>
             data: {
                 alertId: id,
                 learnedId: result.learnedId,
-                messageSent: true
+                messageSent,
+                scheduled,
+                queueMessageId
             }
         });
-    } catch (error: any) {
-        console.error('Error responding to alert:', error);
+    } catch (error: unknown) {
+        Logger.error('Error responding to alert:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -201,11 +267,11 @@ export const dismissAlert = async (req: Request, res: Response): Promise<void> =
             success: true,
             data: alert
         });
-    } catch (error: any) {
-        console.error('Error dismissing alert:', error);
+    } catch (error: unknown) {
+        Logger.error('Error dismissing alert:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -224,11 +290,90 @@ export const getAlertStats = async (req: Request, res: Response): Promise<void> 
             success: true,
             data: stats
         });
-    } catch (error: any) {
-        console.error('Error getting alert stats:', error);
+    } catch (error: unknown) {
+        Logger.error('Error getting alert stats:', error);
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
+
+/**
+ * Get frequent unanswered questions
+ */
+export const getFrequentUnanswered = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const orchestrator = BotOrchestrator.getInstance();
+        const alertService = orchestrator.getAlertService();
+
+        const similarityThreshold = parseFloat(req.query.threshold as string) || 0.7;
+        const data = alertService.getFrequentUnanswered(similarityThreshold);
+
+        res.json({
+            success: true,
+            data
+        });
+    } catch (error: unknown) {
+        Logger.error('Error getting frequent unanswered:', error);
+        res.status(500).json({
+            success: false,
+            error: getErrorMessage(error)
+        });
+    }
+};
+
+/**
+ * Export alerts to CSV
+ */
+export const exportAlerts = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const orchestrator = BotOrchestrator.getInstance();
+        const alertService = orchestrator.getAlertService();
+
+        const status = req.query.status as string || 'pending';
+        let alerts;
+
+        if (status === 'all') {
+            alerts = alertService.getAllAlerts(10000); // High limit for export
+        } else if (status === 'pending') {
+            alerts = alertService.getActiveAlerts();
+        } else {
+            alerts = alertService.getAllAlerts(10000).filter(a => a.status === status);
+        }
+
+        // Generate CSV manually
+        const headers = ['ID', 'Fecha', 'TelÃ©fono', 'Nombre', 'Mensaje Original', 'Intent', 'Confianza', 'Prioridad', 'Estado', 'Respuesta', 'Respondido Por'];
+
+        let csvContent = headers.join(',') + '\n';
+
+        alerts.forEach(alert => {
+            const row = [
+                alert.id,
+                `"${new Date(alert.createdAt).toLocaleString()}"`,
+                alert.customerPhone,
+                `"${alert.customerName.replace(/"/g, '""')}"`, // Escape quotes
+                `"${alert.originalMessage.replace(/"/g, '""').replace(/\n/g, ' ')}"`, // Escape quotes and remove newlines
+                alert.geminiAnalysis?.intent || 'unknown',
+                (alert.geminiAnalysis?.confidence || 0).toFixed(2),
+                alert.priority,
+                alert.status,
+                `"${(alert.userResponse || '').replace(/"/g, '""').replace(/\n/g, ' ')}"`,
+                alert.respondedBy || ''
+            ];
+            csvContent += row.join(',') + '\n';
+        });
+
+        res.setHeader('Content-Type', 'text/csv; charset=utf-8');
+        res.setHeader('Content-Disposition', `attachment; filename=alerts_export_${new Date().toISOString().slice(0, 10)}.csv`);
+        res.status(200).send(csvContent);
+
+    } catch (error: unknown) {
+        Logger.error('Error exporting alerts:', error);
+        res.status(500).json({
+            success: false,
+            error: getErrorMessage(error)
+        });
+    }
+};
+

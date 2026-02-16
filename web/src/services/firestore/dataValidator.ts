@@ -47,6 +47,11 @@ export class DataValidatorClass {
      * Validate that a teacher ID exists
      */
     async validateTeacherExists(teacherId: string): Promise<boolean> {
+        // First, try to find by uid field (new system uses uid)
+        const allTeachers = await maestrosService.getAllMaestros();
+        const teacherByUid = allTeachers.find(t => t.uid === teacherId);
+        if (teacherByUid) return true;
+        // Fallback: try to find by document ID (legacy)
         const teacher = await maestrosService.getById(teacherId);
         return !!teacher;
     }
@@ -89,12 +94,16 @@ export class DataValidatorClass {
     }> {
         const errors: string[] = [];
 
-        // Validate teacher
-        const teacherId = clase.teacherId || clase.profesor_id;
-        if (teacherId) {
-            const teacherExists = await this.validateTeacherExists(teacherId);
-            if (!teacherExists) {
-                errors.push(`Profesor con ID ${teacherId} no existe`);
+        // Validate teacher(s) - teacherId can be string or string[]
+        const rawTeacherId = clase.teacherId || clase.profesor_id;
+        if (rawTeacherId) {
+            // Handle both single and array of teacher IDs
+            const teacherIds = Array.isArray(rawTeacherId) ? rawTeacherId : [rawTeacherId];
+            for (const tid of teacherIds) {
+                const teacherExists = await this.validateTeacherExists(tid);
+                if (!teacherExists) {
+                    errors.push(`Profesor con ID ${tid} no existe`);
+                }
             }
         }
 
@@ -161,22 +170,30 @@ export class DataValidatorClass {
         report.summary.totalSalones = salones.length;
         report.summary.totalAlumnos = alumnos.length;
 
-        // Create ID sets for fast lookup
+        // Create ID sets for fast lookup (include both document ID and uid for teachers)
         const maestroIds = new Set(maestros.map(m => m.id));
+        const maestroUids = new Set(maestros.filter(m => m.uid).map(m => m.uid!));
         const salonIds = new Set(salones.map(s => s.id));
         const alumnoIds = new Set(alumnos.map(a => a.id));
         const claseIds = new Set(clases.map(c => c.id));
 
         // Check orphaned teacher references in CLASES
         clases.forEach(clase => {
-            const teacherId = clase.teacherId || clase.profesor_id;
-            if (teacherId && !maestroIds.has(teacherId)) {
-                report.orphanedReferences.push({
-                    entityType: 'clase',
-                    entityId: clase.id,
-                    entityName: clase.name || clase.nombre,
-                    referenceType: 'teacher',
-                    invalidId: teacherId
+            const rawTeacherId = clase.teacherId || clase.profesor_id;
+            if (rawTeacherId) {
+                // Handle both single and array of teacher IDs
+                const teacherIds = Array.isArray(rawTeacherId) ? rawTeacherId : [rawTeacherId];
+                teacherIds.forEach(tid => {
+                    // Check against both document IDs and UIDs
+                    if (!maestroIds.has(tid) && !maestroUids.has(tid)) {
+                        report.orphanedReferences.push({
+                            entityType: 'clase',
+                            entityId: clase.id,
+                            entityName: clase.name || clase.nombre,
+                            referenceType: 'teacher',
+                            invalidId: tid
+                        });
+                    }
                 });
             }
 
@@ -288,7 +305,7 @@ export class DataValidatorClass {
         });
 
         // Calculate total issues
-        report.summary.issuesFound = 
+        report.summary.issuesFound =
             report.orphanedReferences.length +
             report.missingSchedules.length +
             report.inconsistentBidirectional.length +

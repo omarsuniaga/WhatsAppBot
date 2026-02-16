@@ -33,7 +33,7 @@ export const SettingsModal = ({ isOpen, onClose }: SettingsModalProps) => {
             localStorage.setItem('GEMINI_API_KEY', apiKey);
 
             // 2. Send to Backend
-            await aiApi.updateConfig(apiKey);
+            await aiApi.updateConfig({ geminiApiKey: apiKey });
 
             setStatus('success');
             setTimeout(() => {

@@ -23,8 +23,8 @@ import {
   TemplatesPage,
   ContactsPage,
   TeachersPage,
-  AttendancePage,
   AttendanceControlPage,
+  AttendancePage,
   StudentsPage,
   ClassesPage,
   SchedulePage,
@@ -45,7 +45,7 @@ function App() {
       const savedKey = localStorage.getItem('GEMINI_API_KEY');
       if (savedKey) {
         try {
-          await aiApi.updateConfig(savedKey);
+          await aiApi.updateConfig({ geminiApiKey: savedKey });
           console.log('AI Config synced from storage');
         } catch (error) {
           console.error('Failed to sync AI config:', error);
@@ -117,8 +117,8 @@ function App() {
           <Route path="/teachers" element={<TeachersPage />} />
 
           {/* Institutional Management - No requieren WhatsApp */}
-          <Route path="/attendance" element={<AttendancePage />} />
-          <Route path="/attendance/control" element={<AttendanceControlPage />} />
+          <Route path="/attendance" element={<AttendanceControlPage />} />
+          <Route path="/attendance/register" element={<AttendancePage />} />
           <Route path="/students" element={<StudentsPage />} />
           <Route path="/classes" element={<ClassesPage />} />
           <Route path="/rooms" element={<RoomsPage />} />

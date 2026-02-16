@@ -1,11 +1,9 @@
-/**
- * PendingAlertService - Manages alerts when bot cannot respond
- * Creates visual escalations to dashboard for human intervention
- */
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, mkdirSync } from 'fs';
+import { writeFileSyncAtomic } from '../utils/atomicWrite';
 import { join, dirname } from 'path';
 import { EventEmitter } from 'events';
 import MetricsService from './metricsService';
+import Logger from './loggerService';
 
 export interface GeminiAnalysis {
     intent: string;
@@ -43,6 +41,7 @@ export interface PendingAlert {
 
     createdAt: string;
     expiresAt: string;
+    aiDraftResponse?: string;
 }
 
 interface AlertsData {
@@ -82,7 +81,7 @@ class PendingAlertService extends EventEmitter {
                 return JSON.parse(readFileSync(DATA_PATH, 'utf-8'));
             }
         } catch (error) {
-            console.error('[PendingAlertService] Error loading data:', error);
+            Logger.error('[PendingAlertService] Error loading data:', error);
         }
 
         return {
@@ -97,9 +96,9 @@ class PendingAlertService extends EventEmitter {
             if (!existsSync(dir)) {
                 mkdirSync(dir, { recursive: true });
             }
-            writeFileSync(DATA_PATH, JSON.stringify(this.data, null, 2));
+            writeFileSyncAtomic(DATA_PATH, JSON.stringify(this.data, null, 2));
         } catch (error) {
-            console.error('[PendingAlertService] Error saving data:', error);
+            Logger.error('[PendingAlertService] Error saving data:', error);
         }
     }
 
@@ -147,17 +146,18 @@ class PendingAlertService extends EventEmitter {
         customerName: string,
         originalMessage: string,
         geminiAnalysis: GeminiAnalysis,
-        conversationContext: ConversationMessage[] = []
+        conversationContext: ConversationMessage[] = [],
+        aiDraftResponse?: string
     ): Promise<PendingAlert> {
         // Input validation
         if (!this.isValidJid(chatJid)) {
-            console.error(`[PendingAlertService] Invalid JID: ${chatJid}`);
+            Logger.error(`[PendingAlertService] Invalid JID: ${chatJid}`);
             throw new Error('Invalid chat JID format');
         }
 
         const sanitizedMessage = this.sanitizeString(originalMessage, MAX_MESSAGE_LENGTH);
         if (!sanitizedMessage) {
-            console.error('[PendingAlertService] Empty message provided');
+            Logger.error('[PendingAlertService] Empty message provided');
             throw new Error('Message cannot be empty');
         }
 
@@ -176,7 +176,8 @@ class PendingAlertService extends EventEmitter {
             priority: this.determinePriority(geminiAnalysis),
             shouldLearn: true,
             createdAt: new Date().toISOString(),
-            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(), // 24 hours
+            aiDraftResponse
         };
 
         this.data.alerts.unshift(alert);
@@ -185,7 +186,7 @@ class PendingAlertService extends EventEmitter {
         // Emit event for WebSocket
         this.emit('alert:new', alert);
 
-        console.log(`[PendingAlertService] Created alert ${alert.id} for ${customerName}`);
+        Logger.info(`[PendingAlertService] Created alert ${alert.id} for ${customerName}`);
 
         return alert;
     }
@@ -237,13 +238,13 @@ class PendingAlertService extends EventEmitter {
     ): Promise<{ alert: PendingAlert; learnedFaqId?: string } | null> {
         // Input validation
         if (!alertId || typeof alertId !== 'string') {
-            console.error('[PendingAlertService] Invalid alert ID');
+            Logger.error('[PendingAlertService] Invalid alert ID');
             return null;
         }
 
         const sanitizedResponse = this.sanitizeString(response, MAX_RESPONSE_LENGTH);
         if (!sanitizedResponse) {
-            console.error('[PendingAlertService] Empty response provided');
+            Logger.error('[PendingAlertService] Empty response provided');
             return null;
         }
 
@@ -252,7 +253,7 @@ class PendingAlertService extends EventEmitter {
         const alertIndex = this.data.alerts.findIndex(a => a.id === alertId);
 
         if (alertIndex === -1) {
-            console.error(`[PendingAlertService] Alert ${alertId} not found`);
+            Logger.error(`[PendingAlertService] Alert ${alertId} not found`);
             return null;
         }
 
@@ -274,7 +275,7 @@ class PendingAlertService extends EventEmitter {
         // Emit event
         this.emit('alert:responded', alert);
 
-        console.log(`[PendingAlertService] Alert ${alertId} responded by ${respondedBy}`);
+        Logger.info(`[PendingAlertService] Alert ${alertId} responded by ${respondedBy}`);
 
         return { alert };
     }
@@ -325,7 +326,7 @@ class PendingAlertService extends EventEmitter {
     }
 
     /**
-     * Clean expired alerts (auto-dismiss)
+     * Clean expired alerts (auto-dismiss) and purge old resolved alerts
      */
     private cleanExpiredAlerts(): void {
         const now = new Date();
@@ -338,6 +339,19 @@ class PendingAlertService extends EventEmitter {
                 alert.respondedAt = now.toISOString();
                 changed = true;
             }
+        }
+
+        // Purge resolved alerts older than 7 days to prevent unbounded array growth
+        const RETENTION_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
+        const cutoff = new Date(now.getTime() - RETENTION_MS);
+        const beforeCount = this.data.alerts.length;
+        this.data.alerts = this.data.alerts.filter(a => {
+            if (a.status === 'pending') return true; // Never remove pending alerts
+            const resolvedDate = a.respondedAt ? new Date(a.respondedAt) : new Date(a.createdAt);
+            return resolvedDate > cutoff;
+        });
+        if (this.data.alerts.length !== beforeCount) {
+            changed = true;
         }
 
         if (changed) {
@@ -380,6 +394,86 @@ class PendingAlertService extends EventEmitter {
                 low: alerts.filter(a => a.priority === 'low' && a.status === 'pending').length
             }
         };
+    }
+
+    /**
+     * Get frequent unanswered questions grouped by similarity
+     */
+    getFrequentUnanswered(similarityThreshold: number = 0.7): Array<{
+        question: string;
+        count: number;
+        alertIds: string[];
+        latestAlert: PendingAlert;
+    }> {
+        const pendingAlerts = this.getActiveAlerts();
+        const groups: Array<{
+            question: string;
+            alertIds: string[];
+            latestAlert: PendingAlert;
+        }> = [];
+
+        for (const alert of pendingAlerts) {
+            let addedToGroup = false;
+
+            // Try to find a matching group
+            for (const group of groups) {
+                const similarity = this.calculateSimilarity(alert.originalMessage, group.question);
+                if (similarity >= similarityThreshold) {
+                    group.alertIds.push(alert.id);
+                    // Keep the most recent alert as the representative for the group
+                    if (new Date(alert.createdAt) > new Date(group.latestAlert.createdAt)) {
+                        group.latestAlert = alert;
+                    }
+                    addedToGroup = true;
+                    break;
+                }
+            }
+
+            // Create new group if no match found
+            if (!addedToGroup) {
+                groups.push({
+                    question: alert.originalMessage,
+                    alertIds: [alert.id],
+                    latestAlert: alert
+                });
+            }
+        }
+
+        // Transform and sort by count (descending)
+        return groups
+            .map(g => ({
+                question: g.latestAlert.originalMessage, // Use the latest message as the "canonical" one
+                count: g.alertIds.length,
+                alertIds: g.alertIds,
+                latestAlert: g.latestAlert
+            }))
+            .sort((a, b) => b.count - a.count);
+    }
+
+    /**
+     * Calculate string similarity (Jaccard index on word overlap)
+     */
+    private calculateSimilarity(str1: string, str2: string): number {
+        const normalize = (s: string) => s.toLowerCase()
+            .normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+            .replace(/[^\w\s]/g, '')
+            .split(/\s+/).filter(w => w.length > 3); // Only consider words > 3 chars
+
+        const words1 = new Set(normalize(str1));
+        const words2 = new Set(normalize(str2));
+
+        if (words1.size === 0 && words2.size === 0) return 1;
+        if (words1.size === 0 || words2.size === 0) return 0;
+
+        let intersection = 0;
+        for (const word of words1) {
+            if (words2.has(word)) {
+                intersection++;
+            }
+        }
+
+        const union = words1.size + words2.size - intersection;
+        return union > 0 ? intersection / union : 0;
     }
 
     /**

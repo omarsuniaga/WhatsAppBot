@@ -1,62 +1,63 @@
-# Node.js
+# ============================================
+# .dockerignore — WhatsApp Bot Platform
+# Keep the build context minimal and secret-free
+# ============================================
+
+# ---- Dependencies (reinstalled inside Docker) ----
 node_modules/
 web/node_modules/
-npm-debug.log*
 
-# Build outputs (se generan en el builder stage)
+# ---- Build outputs (rebuilt in Docker) ----
 lib/
-dist/
 web/dist/
-*.tsbuildinfo
 
-# Development
-.git/
-.gitignore
-.claude/
-.gemini/
-.vscode/
-.idea/
-
-# Environment y secrets
+# ---- Secrets & credentials (NEVER in image) ----
 .env
 .env.*
+!.env.example
+*-firebase-adminsdk*.json
+serviceAccountKey.json
+google-services.json
 
-# Runtime data (montar como volúmenes)
-web-bot_sessions/
-data/
-backend/data/
-logs/
-uploads/
+# ---- Session data (persisted via volume) ----
+auth_info/
+auth_info_baileys/
 
-# Testing
-coverage/
-.nyc_output
-tests/
-*.test.ts
-*.spec.ts
-
-# Cache
-.npm
-.eslintcache
-.cache
-
-# OS
+# ---- IDE & OS ----
+.vscode/
+.idea/
 .DS_Store
 Thumbs.db
 
-# Docker
-Dockerfile*
-docker-compose*
-.dockerignore
+# ---- Tests (not needed at runtime) ----
+tests/
+**/*.test.ts
+**/*.test.tsx
+**/*.spec.ts
+coverage/
 
-# Certificates
-*.pem
-*.key
-*.crt
-secrets/
-ssl/
+# ---- Docker files (don't copy into themselves) ----
+Dockerfile
+docker-compose*.yml
 
-# Monitoring (no existe aún)
-monitoring/
-prometheus/
-grafana/
+# ---- Docs, agents, scripts (not needed at runtime) ----
+agents/
+.agents/
+docs/
+scripts/
+*.md
+!data/**
+
+# ---- Git ----
+.git/
+.gitignore
+.claude/
+
+# ---- Nginx config (mounted separately) ----
+nginx/
+
+# ---- Misc ----
+*.png
+*.pdf
+*.log
+*.txt

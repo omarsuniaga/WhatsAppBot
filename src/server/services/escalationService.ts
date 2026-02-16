@@ -6,6 +6,7 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { writeFileSyncAtomic } from '../utils/atomicWrite';
 import type {
     EscalationTicket,
     TicketMessage,
@@ -122,7 +123,7 @@ export class EscalationService {
     private saveData(): void {
         try {
             this.data.lastUpdated = new Date().toISOString();
-            fs.writeFileSync(this.dataPath, JSON.stringify(this.data, null, 2));
+            writeFileSyncAtomic(this.dataPath, JSON.stringify(this.data, null, 2));
         } catch (error) {
             console.error('Error saving escalation data:', error);
         }
@@ -415,12 +416,18 @@ export class EscalationService {
 
     private async notifyAdminsNewTicket(ticket: EscalationTicket): Promise<void> {
         const admins = this.getActiveAdmins().filter(a => a.notifyOnNewTicket);
-        
+
         if (ticket.priority === 'urgent') {
             // Notify all admins for urgent tickets
             const urgentAdmins = this.getActiveAdmins().filter(a => a.notifyOnUrgent);
             admins.push(...urgentAdmins.filter(a => !admins.find(existing => existing.jid === a.jid)));
         }
+
+        // Exclude the already-assigned admin to avoid duplicate notification
+        // (autoAssignTicket already sends its own assignment notification)
+        const adminsToNotify = ticket.assignedTo
+            ? admins.filter(a => a.jid !== ticket.assignedTo)
+            : admins;
 
         const priorityEmoji = {
             low: '🟢',
@@ -443,7 +450,7 @@ Para responder, usa:
 #${ticket.id} tu respuesta aquí
 `.trim();
 
-        for (const admin of admins) {
+        for (const admin of adminsToNotify) {
             await this.sendNotification(admin.jid, 'new_ticket', ticket.id, message);
         }
     }
@@ -538,7 +545,7 @@ Para responder, usa:
 
         tickets.forEach(t => {
             byPriority[t.priority] = (byPriority[t.priority] || 0) + 1;
-            t.tags.forEach(tag => {
+            (t.tags || []).forEach(tag => {
                 byCategory[tag] = (byCategory[tag] || 0) + 1;
             });
             if (t.assignedTo) {

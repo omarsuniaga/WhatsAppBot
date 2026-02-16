@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import BotService from '../services/botService';
 import { ApiResponse, WhatsAppGroupMetadata, ParticipantAction } from '../types';
+import { getErrorMessage } from '../utils/errorUtils';
 
 const botService = BotService.getInstance();
 
@@ -15,10 +16,10 @@ export const getAllGroups = async (req: Request, res: Response): Promise<void> =
             success: true,
             data: groups
         } as ApiResponse);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         } as ApiResponse);
     }
 };
@@ -44,10 +45,10 @@ export const getGroupMetadata = async (req: Request, res: Response): Promise<voi
             success: true,
             data: metadata
         } as ApiResponse<WhatsAppGroupMetadata>);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         } as ApiResponse);
     }
 };
@@ -82,10 +83,10 @@ export const createGroup = async (req: Request, res: Response): Promise<void> =>
             data: result,
             message: 'Group created successfully'
         } as ApiResponse);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         } as ApiResponse);
     }
 };
@@ -120,10 +121,10 @@ export const updateGroupSubject = async (req: Request, res: Response): Promise<v
             success: true,
             message: 'Group subject updated'
         } as ApiResponse);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         } as ApiResponse);
     }
 };
@@ -150,10 +151,10 @@ export const updateGroupDescription = async (req: Request, res: Response): Promi
             success: true,
             message: 'Group description updated'
         } as ApiResponse);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         } as ApiResponse);
     }
 };
@@ -212,10 +213,10 @@ export const manageParticipants = async (req: Request, res: Response): Promise<v
             data: result,
             message: `Participants ${action} successful`
         } as ApiResponse);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         } as ApiResponse);
     }
 };
@@ -241,10 +242,10 @@ export const leaveGroup = async (req: Request, res: Response): Promise<void> => 
             success: true,
             message: 'Left group successfully'
         } as ApiResponse);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         } as ApiResponse);
     }
 };
@@ -273,10 +274,10 @@ export const getInviteCode = async (req: Request, res: Response): Promise<void> 
                 link: `https://chat.whatsapp.com/${code}`
             }
         } as ApiResponse);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         } as ApiResponse);
     }
 };
@@ -306,10 +307,10 @@ export const revokeInviteCode = async (req: Request, res: Response): Promise<voi
             },
             message: 'Invite code revoked'
         } as ApiResponse);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         } as ApiResponse);
     }
 };
@@ -341,10 +342,10 @@ export const joinGroup = async (req: Request, res: Response): Promise<void> => {
             data: { groupJid },
             message: 'Joined group successfully'
         } as ApiResponse);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         } as ApiResponse);
     }
 };
@@ -380,10 +381,10 @@ export const updateSettings = async (req: Request, res: Response): Promise<void>
             success: true,
             message: 'Group settings updated'
         } as ApiResponse);
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         } as ApiResponse);
     }
 };

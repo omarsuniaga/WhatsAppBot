@@ -1,5 +1,6 @@
 export interface AgentConfig {
     geminiApiKey: string;
+    groqApiKey?: string;
     contextFilePath: string;
     systemPrompt?: string;
 }

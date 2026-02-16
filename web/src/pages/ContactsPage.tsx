@@ -3,10 +3,13 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { 
     UserCheck, Plus, Edit2, Trash2, RefreshCw, 
     Phone, Search, AlertCircle, User, Users
 } from 'lucide-react';
+import { InfoButton } from '../components/common/InfoButton';
+import { usePageInfo } from '../hooks/useViewInfo';
 
 interface Contact {
     id: string;
@@ -28,18 +31,46 @@ interface Contact {
 const API_BASE = 'http://localhost:3001/api/admin';
 
 export const ContactsPage = () => {
+    const navigate = useNavigate();
+    const [searchParams, setSearchParams] = useSearchParams();
     const [contacts, setContacts] = useState<Contact[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
+    const pageInfo = usePageInfo('contacts');
     const [searchTerm, setSearchTerm] = useState('');
     const [editingContact, setEditingContact] = useState<Contact | null>(null);
     const [isCreating, setIsCreating] = useState(false);
+    const fromDiagnostics = searchParams.get('source') === 'attendance-diagnostics';
+    const diagnosticReason = searchParams.get('reason') || '';
+    const diagnosticId = searchParams.get('diagId') || '';
 
     const getAdminKey = () => localStorage.getItem('ADMIN_API_KEY') || 'dev-admin-key-123';
 
     useEffect(() => {
         loadContacts();
     }, []);
+
+    useEffect(() => {
+        const urlSearch = searchParams.get('search');
+        if (urlSearch && urlSearch !== searchTerm) {
+            setSearchTerm(urlSearch);
+        }
+
+        const editContactId = searchParams.get('edit');
+        if (editContactId && contacts.length > 0 && !editingContact) {
+            const contact = contacts.find(c => c.id === editContactId);
+            if (contact) {
+                setEditingContact(contact);
+                setIsCreating(false);
+            }
+
+            setSearchParams(prev => {
+                const next = new URLSearchParams(prev);
+                next.delete('edit');
+                return next;
+            });
+        }
+    }, [searchParams, setSearchParams, contacts, editingContact, searchTerm]);
 
     const loadContacts = async () => {
         setLoading(true);
@@ -107,12 +138,15 @@ export const ContactsPage = () => {
         }
     };
 
+    const filteredStudentId = searchParams.get('studentId');
     const filteredContacts = contacts.filter(c => {
         const fullName = `${c.firstName} ${c.lastName}`.toLowerCase();
         const search = searchTerm.toLowerCase();
-        return fullName.includes(search) ||
+        const matchesSearch = fullName.includes(search) ||
             c.phones?.some(p => p.includes(searchTerm)) ||
             c.studentName?.toLowerCase().includes(search);
+        const matchesStudent = !filteredStudentId || c.studentIds?.includes(filteredStudentId);
+        return matchesSearch && matchesStudent;
     });
 
     return (
@@ -128,6 +162,13 @@ export const ContactsPage = () => {
                         <span className="text-sm text-gray-500 dark:text-gray-400">
                             ({contacts.length})
                         </span>
+                        {pageInfo.hasInfo && (
+                            <InfoButton
+                                title={pageInfo.title}
+                                description={pageInfo.description}
+                                tips={pageInfo.tips}
+                            />
+                        )}
                     </div>
                     <button
                         onClick={() => { 
@@ -140,6 +181,27 @@ export const ContactsPage = () => {
                         Nuevo Contacto
                     </button>
                 </div>
+
+                {fromDiagnostics && (
+                    <div className="mb-4 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800 bg-indigo-50 dark:bg-indigo-900/20 text-indigo-800 dark:text-indigo-300 text-sm">
+                        Contexto: abierto desde diagnostico de asistencias. Verifica telefono o JID del contacto.
+                        {diagnosticReason && <span className="block mt-1 font-medium">Motivo: {diagnosticReason}</span>}
+                        <button
+                            onClick={() => {
+                                const params = new URLSearchParams({
+                                    source: 'fix-return',
+                                    focus: 'contact-diagnostics'
+                                });
+                                if (diagnosticReason) params.set('reason', diagnosticReason);
+                                if (diagnosticId) params.set('diagId', diagnosticId);
+                                navigate(`/attendance?${params.toString()}`);
+                            }}
+                            className="mt-2 inline-flex items-center px-3 py-1.5 rounded bg-indigo-600 text-white text-xs font-semibold hover:bg-indigo-700 transition-colors"
+                        >
+                            Volver a Diagnostico
+                        </button>
+                    </div>
+                )}
 
                 {/* Search */}
                 <div className="relative mb-6">

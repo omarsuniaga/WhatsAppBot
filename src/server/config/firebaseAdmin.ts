@@ -4,11 +4,11 @@
  */
 
 import * as admin from 'firebase-admin';
-import * as dotenv from 'dotenv';
 import * as path from 'path';
+import Logger from '../services/loggerService';
+import { getErrorMessage } from '../utils/errorUtils';
 
-// Load environment variables
-dotenv.config();
+// Environment variables are loaded at process bootstrap (src/server/index.ts)
 
 let db: admin.firestore.Firestore;
 let isInitialized = false;
@@ -24,24 +24,23 @@ export const initializeFirebaseAdmin = (): admin.firestore.Firestore => {
   try {
     // Opción 1: Service Account JSON file
     const serviceAccountPath = process.env.FIREBASE_ADMIN_SERVICE_ACCOUNT;
-    
+
     if (serviceAccountPath) {
       const absolutePath = path.resolve(process.cwd(), serviceAccountPath);
-      console.log('Firebase Service Account Path:', absolutePath);
       try {
         const serviceAccount = require(absolutePath);
-        
+
         admin.initializeApp({
           credential: admin.credential.cert(serviceAccount),
           projectId: serviceAccount.project_id
         });
-        
-        console.log('✅ Firebase Admin initialized with Service Account file');
+
+        Logger.info('Firebase Admin initialized with Service Account file');
       } catch (err) {
-        console.error('❌ Failed to load service account file:', err);
-        console.warn('⚠️ Server will start in LIMITED MODE (No Firebase features)');
+        Logger.error('Failed to load service account file', err);
+        Logger.warn('Server will start in LIMITED MODE (No Firebase features)');
       }
-    } 
+    }
     // Opción 2: Environment variables individuales
     else if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_PRIVATE_KEY && process.env.FIREBASE_CLIENT_EMAIL) {
       admin.initializeApp({
@@ -52,20 +51,20 @@ export const initializeFirebaseAdmin = (): admin.firestore.Firestore => {
         }),
         projectId: process.env.FIREBASE_PROJECT_ID
       });
-      
-      console.log('✅ Firebase Admin initialized with environment variables');
+
+      Logger.info('Firebase Admin initialized with environment variables');
     }
     // Opción 3: Default credentials (Cloud Functions, Cloud Run, etc.)
     else if (process.env.FIREBASE_CONFIG || process.env.GCLOUD_PROJECT) {
       admin.initializeApp();
-      console.log('✅ Firebase Admin initialized with default credentials');
+      Logger.info('Firebase Admin initialized with default credentials');
     }
     // Fallback: Try with explicit project ID from .env
     else if (process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID) {
-      console.warn('⚠️ Using client SDK project ID. This may not work for Admin SDK operations.');
-      console.warn('⚠️ Please configure Firebase Admin SDK credentials properly.');
-      console.warn('⚠️ See FIREBASE_ADMIN_SETUP.md for instructions.');
-      
+      Logger.warn('Using client SDK project ID. This may not work for Admin SDK operations.');
+      Logger.warn('Please configure Firebase Admin SDK credentials properly.');
+      Logger.warn('See FIREBASE_ADMIN_SETUP.md for instructions.');
+
       // Try to initialize anyway for development
       admin.initializeApp({
         projectId: process.env.EXPO_PUBLIC_FIREBASE_PROJECT_ID
@@ -81,12 +80,12 @@ export const initializeFirebaseAdmin = (): admin.firestore.Firestore => {
 
     db = admin.firestore();
     isInitialized = true;
-    
-    console.log(`🔥 Connected to Firestore: ${admin.app().options.projectId}`);
-    
+
+    Logger.info(`Connected to Firestore: ${admin.app().options.projectId}`);
+
     return db;
-  } catch (error: any) {
-    console.error('❌ Error initializing Firebase Admin SDK:', error.message);
+  } catch (error: unknown) {
+    Logger.error(`Error initializing Firebase Admin SDK: ${getErrorMessage(error)}`);
     throw error;
   }
 };
@@ -121,26 +120,29 @@ export const getAdmin = (): typeof admin => {
   return admin;
 };
 
-// Lazy export for db
-export { dbProxy as db };
+// Use a proxy for the exported db to handle lazy initialization and provide better errors
+const firestoreProxy = new Proxy({} as admin.firestore.Firestore, {
+  get(_, prop) {
+    if (!isInitialized) {
+      try {
+        initializeFirebaseAdmin();
+      } catch (error: unknown) {
+        throw new Error(`🔥 Firebase Admin not initialized. Cannot access db.${String(prop)}. Please configure Service Account Key.`);
+      }
+    }
+    return (db as any)[prop];
+  }
+});
 
-// Auto-initialize on import (solo si no estamos en test environment)
+export { firestoreProxy as db };
+
+// Auto-initialize on import (unless in test environment)
 if (process.env.NODE_ENV !== 'test') {
   try {
-    const initializedDb = initializeFirebaseAdmin();
-    dbProxy = initializedDb;
-  } catch (error: any) {
-    console.error('⚠️  Failed to auto-initialize Firebase Admin:', error.message);
-    console.error('⚠️  API endpoints will not work until Firebase Admin is configured.');
-    console.error('⚠️  See SERVICE_ACCOUNT_NEEDED.md for instructions.');
-    
-    // Create a proxy that throws a helpful error instead of just being undefined
-    dbProxy = new Proxy({} as any, {
-      get(_, prop) {
-          return (...args: any[]) => {
-              throw new Error(`🔥 Firebase Admin not initialized. Cannot access db.${String(prop)}. Please configure Service Account Key as described in SERVICE_ACCOUNT_NEEDED.md`);
-          };
-      }
-    });
+    initializeFirebaseAdmin();
+  } catch (error: unknown) {
+    Logger.warn(`Failed to auto-initialize Firebase Admin: ${getErrorMessage(error)}`);
+    Logger.warn('API endpoints will not work until Firebase Admin is configured.');
+    Logger.warn('See SERVICE_ACCOUNT_NEEDED.md for instructions.');
   }
 }

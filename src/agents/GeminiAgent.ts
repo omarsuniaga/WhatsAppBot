@@ -1,16 +1,34 @@
 import { GoogleGenerativeAI, GenerativeModel } from '@google/generative-ai';
 import { AgentConfig, AIResponse } from './types';
+import { getErrorMessage } from '../server/utils/errorUtils';
+
+// Prefer lighter model to reduce quota usage; fallback to 2.0-flash
+const GEMINI_MODEL = 'gemini-2.0-flash-lite';
+const GEMINI_FALLBACK_MODEL = 'gemini-2.0-flash';
 
 export class GeminiAgent {
     private genAI: GoogleGenerativeAI;
     private model: GenerativeModel;
+    private fallbackModel: GenerativeModel;
     private config: AgentConfig;
 
     constructor(config: AgentConfig) {
         this.config = config;
         this.genAI = new GoogleGenerativeAI(config.geminiApiKey);
-        // Usamos Gemini 1.5 Flash por ser rápido y económico para chat
-        this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+        this.model = this.genAI.getGenerativeModel({
+            model: GEMINI_MODEL,
+            generationConfig: {
+                maxOutputTokens: 512,   // WhatsApp messages are short
+                temperature: 0.7,
+            }
+        });
+        this.fallbackModel = this.genAI.getGenerativeModel({
+            model: GEMINI_FALLBACK_MODEL,
+            generationConfig: {
+                maxOutputTokens: 512,
+                temperature: 0.7,
+            }
+        });
     }
 
     /**
@@ -18,41 +36,48 @@ export class GeminiAgent {
      */
     async generateResponse(userMessage: string, context: string): Promise<AIResponse> {
         try {
-            // Construimos el prompt con instrucciones estrictas
-            const prompt = `
-            ROL: Eres un asistente virtual útil y amable.
-            
-            CONTEXTO DE CONOCIMIENTO (Base de datos):
-            "${context}"
-            
-            INSTRUCCIONES:
-            1. Responde a la pregunta del usuario basándote EXCLUSIVAMENTE en el "CONTEXTO DE CONOCIMIENTO" provisto arriba.
-            2. Si la respuesta no está en el contexto, di amablemente: "Lo siento, no tengo información sobre eso en este momento" y ofrece contactar a un humano si es posible.
-            3. Sé conciso y directo.
-            4. Mantén un tono profesional pero cercano.
-            
-            PREGUNTA DEL USUARIO:
-            "${userMessage}"
-            `;
+            // Prompt optimizado: más corto = menos tokens = menos cuota
+            const prompt = `Eres un asistente virtual útil y amable.
 
-            const result = await this.model.generateContent(prompt);
-            const response = await result.response;
-            const text = response.text();
+CONTEXTO: "${context}"
+
+REGLAS:
+1. Responde SOLO con info del contexto.
+2. Si no hay info, di: "Lo siento, no tengo información sobre eso" y ofrece contactar a un humano.
+3. Sé conciso y directo.
+4. Tono profesional pero cercano.
+
+PREGUNTA: "${userMessage}"`;
+
+            let text = '';
+            try {
+                const result = await this.model.generateContent(prompt);
+                text = result.response.text();
+            } catch (primaryError: any) {
+                // If primary model fails (quota, etc.), try fallback
+                if (primaryError.message?.includes('429') || primaryError.message?.includes('quota')) {
+                    console.warn(`GeminiAgent: ${GEMINI_MODEL} quota exceeded, trying ${GEMINI_FALLBACK_MODEL}...`);
+                    const result = await this.fallbackModel.generateContent(prompt);
+                    text = result.response.text();
+                } else {
+                    throw primaryError;
+                }
+            }
 
             return {
                 text: text,
                 usage: {
-                    // Nota: El conteo exacto depende de la respuesta completa de la API, 
-                    // aquí simplificamos si no necesitamos métricas exactas
-                    promptTokens: 0, 
+                    promptTokens: 0,
                     responseTokens: 0
                 }
             };
 
-        } catch (error) {
-            console.error('Error en GeminiAgent:', error);
+        } catch (error: unknown) {
+            const isQuota = getErrorMessage(error)?.includes('429') || getErrorMessage(error)?.includes('quota');
+            console.error(`Error en GeminiAgent${isQuota ? ' (QUOTA EXCEEDED)' : ''}:`, getErrorMessage(error) || error);
+            // Return empty text so BotOrchestrator falls through to escalation
             return {
-                text: 'Lo siento, tuve un problema procesando tu solicitud. Por favor intenta más tarde.'
+                text: ''
             };
         }
     }
@@ -61,7 +86,20 @@ export class GeminiAgent {
         this.config = { ...this.config, ...newConfig };
         if (newConfig.geminiApiKey) {
             this.genAI = new GoogleGenerativeAI(newConfig.geminiApiKey);
-            this.model = this.genAI.getGenerativeModel({ model: 'gemini-1.5-flash' });
+            this.model = this.genAI.getGenerativeModel({
+                model: GEMINI_MODEL,
+                generationConfig: {
+                    maxOutputTokens: 512,
+                    temperature: 0.7,
+                }
+            });
+            this.fallbackModel = this.genAI.getGenerativeModel({
+                model: GEMINI_FALLBACK_MODEL,
+                generationConfig: {
+                    maxOutputTokens: 512,
+                    temperature: 0.7,
+                }
+            });
         }
     }
 }

@@ -44,7 +44,100 @@
       "categories": []
     }
   ],
-  "tickets": [],
+  "tickets": [
+    {
+      "id": "b9582453-64ec-43d2-b478-795a31f113db",
+      "chatJid": "test-jid",
+      "customerName": "Usuario de Prueba",
+      "customerPhone": "test-jid",
+      "originalMessage": "No podra asistir",
+      "conversationContext": [
+        {
+          "id": "1770958750671",
+          "from": "test-jid",
+          "body": "No podra asistir",
+          "timestamp": "2026-02-13T04:59:10.671Z",
+          "isFromMe": false
+        }
+      ],
+      "status": "resolved",
+      "priority": "medium",
+      "shouldLearn": true,
+      "tags": [],
+      "notes": [
+        "AI error: Error: [GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent: [429 Too Many Requests] You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.0-flash-lite\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash-lite\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash-lite\nPlease retry in 48.215408897s. [{\"@type\":\"type.googleapis.com/google.rpc.Help\",\"links\":[{\"description\":\"Learn more about Gemini API quotas\",\"url\":\"https://ai.google.dev/gemini-api/docs/rate-limits\"}]},{\"@type\":\"type.googleapis.com/google.rpc.QuotaFailure\",\"violations\":[{\"quotaMetric\":\"generativelanguage.googleapis.com/generate_content_free_tier_input_token_count\",\"quotaId\":\"GenerateContentInputTokensPerModelPerMinute-FreeTier\",\"quotaDimensions\":{\"location\":\"global\",\"model\":\"gemini-2.0-flash-lite\"}},{\"quotaMetric\":\"generativelanguage.googleapis.com/generate_content_free_tier_requests\",\"quotaId\":\"GenerateRequestsPerMinutePerProjectPerModel-FreeTier\",\"quotaDimensions\":{\"model\":\"gemini-2.0-flash-lite\",\"location\":\"global\"}},{\"quotaMetric\":\"generativelanguage.googleapis.com/generate_content_free_tier_requests\",\"quotaId\":\"GenerateRequestsPerDayPerProjectPerModel-FreeTier\",\"quotaDimensions\":{\"location\":\"global\",\"model\":\"gemini-2.0-flash-lite\"}}]},{\"@type\":\"type.googleapis.com/google.rpc.RetryInfo\",\"retryDelay\":\"48s\"}]"
+      ],
+      "createdAt": "2026-02-13T04:59:11.061Z",
+      "updatedAt": "2026-02-14T01:42:06.576Z",
+      "assignedTo": "18097176627@s.whatsapp.net",
+      "assignedAt": "2026-02-13T04:59:11.068Z",
+      "adminResponse": "esta bien. explica el motivo",
+      "resolvedAt": "2026-02-14T01:42:06.575Z",
+      "responseTime": 74575507,
+      "resolutionTime": 74575514
+    },
+    {
+      "id": "9e0dcefc-b653-4616-80a6-132145efdc1e",
+      "chatJid": "test-jid",
+      "customerName": "Usuario de Prueba",
+      "customerPhone": "test-jid",
+      "originalMessage": "No podre asistir",
+      "conversationContext": [
+        {
+          "id": "1770958750671",
+          "from": "test-jid",
+          "body": "No podra asistir",
+          "timestamp": "2026-02-13T04:59:10.671Z",
+          "isFromMe": false
+        },
+        {
+          "id": "1770958794886",
+          "from": "test-jid",
+          "body": "No podre asistir",
+          "timestamp": "2026-02-13T04:59:54.886Z",
+          "isFromMe": false
+        }
+      ],
+      "status": "assigned",
+      "priority": "medium",
+      "shouldLearn": false,
+      "tags": [],
+      "notes": [
+        "AI error: Error: [GoogleGenerativeAI Error]: Error fetching from https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent: [429 Too Many Requests] You exceeded your current quota, please check your plan and billing details. For more information on this error, head to: https://ai.google.dev/gemini-api/docs/rate-limits. To monitor your current usage, head to: https://ai.dev/rate-limit. \n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash-lite\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_requests, limit: 0, model: gemini-2.0-flash-lite\n* Quota exceeded for metric: generativelanguage.googleapis.com/generate_content_free_tier_input_token_count, limit: 0, model: gemini-2.0-flash-lite\nPlease retry in 4.096695455s. [{\"@type\":\"type.googleapis.com/google.rpc.Help\",\"links\":[{\"description\":\"Learn more about Gemini API quotas\",\"url\":\"https://ai.google.dev/gemini-api/docs/rate-limits\"}]},{\"@type\":\"type.googleapis.com/google.rpc.QuotaFailure\",\"violations\":[{\"quotaMetric\":\"generativelanguage.googleapis.com/generate_content_free_tier_requests\",\"quotaId\":\"GenerateRequestsPerDayPerProjectPerModel-FreeTier\",\"quotaDimensions\":{\"model\":\"gemini-2.0-flash-lite\",\"location\":\"global\"}},{\"quotaMetric\":\"generativelanguage.googleapis.com/generate_content_free_tier_requests\",\"quotaId\":\"GenerateRequestsPerMinutePerProjectPerModel-FreeTier\",\"quotaDimensions\":{\"location\":\"global\",\"model\":\"gemini-2.0-flash-lite\"}},{\"quotaMetric\":\"generativelanguage.googleapis.com/generate_content_free_tier_input_token_count\",\"quotaId\":\"GenerateContentInputTokensPerModelPerMinute-FreeTier\",\"quotaDimensions\":{\"location\":\"global\",\"model\":\"gemini-2.0-flash-lite\"}}]},{\"@type\":\"type.googleapis.com/google.rpc.RetryInfo\",\"retryDelay\":\"4s\"}]"
+      ],
+      "createdAt": "2026-02-13T04:59:55.134Z",
+      "updatedAt": "2026-02-13T04:59:55.145Z",
+      "assignedTo": "18097176627@s.whatsapp.net",
+      "assignedAt": "2026-02-13T04:59:55.145Z"
+    },
+    {
+      "id": "6c89de66-a32d-4fc2-b975-26ccd6d0648f",
+      "chatJid": "test-jid",
+      "customerName": "Usuario de Prueba",
+      "customerPhone": "test-jid",
+      "originalMessage": "No podre asistir hoy",
+      "conversationContext": [
+        {
+          "id": "1770959138118",
+          "from": "test-jid",
+          "body": "No podre asistir hoy",
+          "timestamp": "2026-02-13T05:05:38.118Z",
+          "isFromMe": false
+        }
+      ],
+      "status": "assigned",
+      "priority": "medium",
+      "shouldLearn": false,
+      "tags": [],
+      "notes": [
+        "No hay información suficiente para responder al mensaje del cliente"
+      ],
+      "createdAt": "2026-02-13T05:05:39.052Z",
+      "updatedAt": "2026-02-13T05:05:39.060Z",
+      "assignedTo": "18097176627@s.whatsapp.net",
+      "assignedAt": "2026-02-13T05:05:39.060Z"
+    }
+  ],
   "notifications": [],
-  "lastUpdated": "2026-01-26T22:32:17.904Z"
+  "lastUpdated": "2026-02-14T01:42:53.296Z"
 }

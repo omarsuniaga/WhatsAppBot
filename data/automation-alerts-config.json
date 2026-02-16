@@ -1,0 +1,50 @@
+{
+  "config": {
+    "enabled": true,
+    "absenceThreshold": 3,
+    "daysToAnalyze": 7,
+    "autoSend": false,
+    "notifyGuardians": true
+  },
+  "history": [
+    {
+      "type": "manual_analysis",
+      "level": "Info",
+      "message": "AnÃ¡lisis manual: 0 estudiantes analizados, 0 borradores generados",
+      "id": "alert-1770949559703-d7ozkl",
+      "createdAt": 1770949559
+    },
+    {
+      "type": "config_update",
+      "level": "Info",
+      "message": "ConfiguraciÃ³n de alertas actualizada",
+      "id": "alert-1770949557281-iywqyf",
+      "createdAt": 1770949557
+    },
+    {
+      "type": "config_update",
+      "level": "Info",
+      "message": "ConfiguraciÃ³n de alertas actualizada",
+      "id": "alert-1770949553061-z1m87l",
+      "createdAt": 1770949553
+    },
+    {
+      "type": "manual_analysis",
+      "level": "Info",
+      "message": "AnÃ¡lisis manual: 0 estudiantes analizados, 0 borradores generados",
+      "id": "alert-1770949543717-k9udgn",
+      "createdAt": 1770949543
+    },
+    {
+      "type": "manual_analysis",
+      "level": "Info",
+      "message": "Análisis manual: 0 estudiantes analizados, 0 borradores generados",
+      "id": "alert-1770674161666-0v29qy",
+      "createdAt": 1770674161
+    }
+  ],
+  "stats": {
+    "totalAlerts": 5,
+    "lastReset": "2026-02-09T21:52:26.058Z"
+  }
+}

@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { BotOrchestrator } from '../../agents';
 import { v4 as uuidv4 } from 'uuid';
+import { getErrorMessage } from '../utils/errorUtils';
 
 const botOrchestrator = BotOrchestrator.getInstance();
 
@@ -20,10 +21,10 @@ export const getConfig = async (req: Request, res: Response): Promise<void> => {
             success: true,
             data: safeConfig
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -51,10 +52,10 @@ export const updateConfig = async (req: Request, res: Response): Promise<void> =
             success: true,
             message: 'Configuration updated'
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -84,10 +85,10 @@ export const toggleBot = async (req: Request, res: Response): Promise<void> => {
                 active: !!active
             }
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -113,10 +114,10 @@ export const testResponse = async (req: Request, res: Response): Promise<void> =
             success: true,
             data: response
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -132,10 +133,10 @@ export const getStats = async (req: Request, res: Response): Promise<void> => {
             success: true,
             data: stats
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -151,10 +152,29 @@ export const resetStats = async (req: Request, res: Response): Promise<void> => 
             success: true,
             message: 'Statistics reset'
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
+        });
+    }
+};
+
+/**
+ * Get bot resolution statistics (KB vs Gemini vs Human escalation)
+ */
+export const getResolutionStats = async (req: Request, res: Response): Promise<void> => {
+    try {
+        const resolutionStats = botOrchestrator.getResolutionStats();
+
+        res.json({
+            success: true,
+            data: resolutionStats
+        });
+    } catch (error: unknown) {
+        res.status(500).json({
+            success: false,
+            error: getErrorMessage(error)
         });
     }
 };
@@ -175,10 +195,10 @@ export const getKnowledgeBase = async (req: Request, res: Response): Promise<voi
             success: true,
             data: kb
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -194,10 +214,10 @@ export const reloadKnowledgeBase = async (req: Request, res: Response): Promise<
             success: true,
             message: 'Knowledge base reloaded'
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -224,10 +244,10 @@ export const updateBusinessContext = async (req: Request, res: Response): Promis
             success: true,
             data: result
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -254,10 +274,10 @@ export const updateFallback = async (req: Request, res: Response): Promise<void>
             success: true,
             data: result
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -292,10 +312,10 @@ export const createCategory = async (req: Request, res: Response): Promise<void>
             success: true,
             data: category
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -323,10 +343,10 @@ export const updateCategory = async (req: Request, res: Response): Promise<void>
             success: true,
             data: result
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -353,10 +373,10 @@ export const deleteCategory = async (req: Request, res: Response): Promise<void>
             success: true,
             message: 'Category deleted'
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -401,10 +421,10 @@ export const createQuestion = async (req: Request, res: Response): Promise<void>
             success: true,
             data: question
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -437,10 +457,10 @@ export const updateQuestion = async (req: Request, res: Response): Promise<void>
             success: true,
             data: result
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };
@@ -467,10 +487,10 @@ export const deleteQuestion = async (req: Request, res: Response): Promise<void>
             success: true,
             message: 'Question deleted'
         });
-    } catch (error: any) {
+    } catch (error: unknown) {
         res.status(500).json({
             success: false,
-            error: error.message
+            error: getErrorMessage(error)
         });
     }
 };

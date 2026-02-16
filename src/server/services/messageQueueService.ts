@@ -1,6 +1,7 @@
-import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'fs';
+import { existsSync, readFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { v4 as uuidv4 } from 'uuid';
+import { writeFileSyncAtomic } from '../utils/atomicWrite';
 import {
     MessageQueueData,
     QueueMessage,
@@ -10,6 +11,7 @@ import {
 } from '../types';
 import RateLimitService from './rateLimitService';
 import BotService from './botService';
+import { getErrorMessage } from '../utils/errorUtils';
 
 const DATA_PATH = join(process.cwd(), 'data', 'message-queue.json');
 const PROCESSED_LIMIT = 500; // Keep last 500 processed messages
@@ -59,7 +61,7 @@ class MessageQueueService {
             if (!existsSync(dir)) {
                 mkdirSync(dir, { recursive: true });
             }
-            writeFileSync(DATA_PATH, JSON.stringify(this.data, null, 2));
+            writeFileSyncAtomic(DATA_PATH, JSON.stringify(this.data, null, 2));
         } catch (error) {
             console.error('Error saving message queue:', error);
         }
@@ -208,13 +210,13 @@ class MessageQueueService {
             rateLimitService.recordMessage(message.target, true, message.targetType);
 
             console.log(`[Queue] Message ${message.id} sent successfully`);
-        } catch (error: any) {
-            message.error = error.message;
+        } catch (error: unknown) {
+            message.error = getErrorMessage(error);
 
             if (message.attempts >= message.maxAttempts) {
                 message.status = 'failed';
                 message.processedAt = new Date().toISOString();
-                console.error(`[Queue] Message ${message.id} failed permanently:`, error.message);
+                console.error(`[Queue] Message ${message.id} failed permanently:`, getErrorMessage(error));
             } else {
                 message.status = 'pending';
                 // Schedule retry with exponential backoff

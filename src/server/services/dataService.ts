@@ -20,11 +20,11 @@ export const studentService = {
    */
   async getAllStudents(activeOnly: boolean = false): Promise<any[]> {
     let query = db.collection('ALUMNOS') as FirebaseFirestore.Query;
-    
+
     if (activeOnly) {
       query = query.where('activo', '==', true);
     }
-    
+
     const snapshot = await query.get();
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
   },
@@ -150,6 +150,13 @@ export const attendanceService = {
       .where('estado', '==', 'en_progreso')
       .get();
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as AttendanceData));
+  },
+
+  async updateAttendance(docId: string, data: Partial<any>): Promise<void> {
+    await db.collection('ASISTENCIAS').doc(docId).update({
+      ...data,
+      updatedAt: new Date()
+    });
   }
 };
 
@@ -235,7 +242,24 @@ export const teacherService = {
   }
 };
 
-// 7. ALERT SERVICE
+// 7. CONTACT SERVICE (Firestore CONTACTOS)
+export const contactService = {
+  async getAllContacts(): Promise<any[]> {
+    const snapshot = await db.collection('CONTACTOS')
+      .orderBy('nombre', 'asc')
+      .get();
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  },
+
+  async getContactsByType(type: string): Promise<any[]> {
+    const snapshot = await db.collection('CONTACTOS')
+      .where('tipo', '==', type)
+      .get();
+    return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+  }
+};
+
+// 8. ALERT SERVICE
 export const alertService = {
   async checkExcessiveAbsences(
     studentId: string,
@@ -261,10 +285,10 @@ export const alertService = {
     pattern: string;
   }> {
     const absences = await absenceService.getStudentAbsences(studentId, 15);
-    
+
     const dayNames = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
     const dayCount: { [key: string]: number } = {};
-    
+
     absences.forEach(a => {
       const date = new Date(a.fecha);
       const dayName = dayNames[date.getDay()];
@@ -273,19 +297,45 @@ export const alertService = {
 
     const entries = Object.entries(dayCount);
     if (entries.length === 0) {
-         return { isSuspicious: false, pattern: 'Sin datos' };
+      return { isSuspicious: false, pattern: 'Sin datos' };
     }
 
     const maxDay = entries.reduce((a, b) =>
       b[1] > a[1] ? b : a
     );
 
-    const isSuspicious = maxDay[1] > 0 && 
-                        maxDay[1] / absences.length > 0.5;
+    const isSuspicious = maxDay[1] > 0 &&
+      maxDay[1] / absences.length > 0.5;
 
     return {
       isSuspicious,
       pattern: isSuspicious ? `Patrón: Falta ${maxDay[0]}s` : 'Sin patrón'
     };
+  }
+};
+
+// 9. AUTOMATION CONFIG SERVICE
+export const automationConfigService = {
+  async getConfig(id: string): Promise<any | null> {
+    const doc = await db.collection('CONFIG_AUTOMATIZACION').doc(id).get();
+    return doc.exists ? { id: doc.id, ...doc.data() } : null;
+  },
+
+  async updateConfig(id: string, data: Partial<any>): Promise<void> {
+    const docRef = db.collection('CONFIG_AUTOMATIZACION').doc(id);
+    const doc = await docRef.get();
+
+    if (doc.exists) {
+      await docRef.update({
+        ...data,
+        updatedAt: new Date()
+      });
+    } else {
+      await docRef.set({
+        ...data,
+        createdAt: new Date(),
+        updatedAt: new Date()
+      });
+    }
   }
 };

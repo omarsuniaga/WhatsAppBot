@@ -2,6 +2,8 @@
  * AI API Client - Frontend service for AI features
  */
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:3001/api/admin';
+
 export interface GenerateTemplateRequest {
     purpose: string;         // "recordatorio" | "bienvenida" | "confirmacion" | "promocion" | "personalizado"
     tone: string;            // "formal" | "amigable" | "profesional"
@@ -43,7 +45,7 @@ export interface GenerateVariationResponse {
  * Generate a template using AI (Gemini)
  */
 export async function generateTemplate(request: GenerateTemplateRequest): Promise<GenerateTemplateResponse> {
-    const response = await fetch('/api/admin/ai/generate-template', {
+    const response = await fetch(`${API_BASE}/ai/generate-template`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'
@@ -64,7 +66,7 @@ export async function generateTemplate(request: GenerateTemplateRequest): Promis
  * Generate a variation of an existing template
  */
 export async function generateVariation(request: GenerateVariationRequest): Promise<GenerateVariationResponse> {
-    const response = await fetch('/api/admin/ai/generate-variation', {
+    const response = await fetch(`${API_BASE}/ai/generate-variation`, {
         method: 'POST',
         headers: {
             'Content-Type': 'application/json'

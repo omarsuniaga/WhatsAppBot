@@ -225,6 +225,13 @@ Diseñado para migrar limpio a tablas relacionales (`conversation_context`, `gui
 - Motor de `GuidedFlow` (lectura de config JSON)
 - Editor básico de flujos en el dashboard (crear/editar/activar)
 - Máquina de estados de conversación
+- **Implementada** como módulo hexagonal en `src/modules/guided-flows/`, siguiendo la misma convención de Fase A (sección 15):
+  - `domain/GuidedFlow.ts` — entidad `GuidedFlow`, `FlowState` y lógica pura (selección de flujo por `relationType`+intención, fusión de entidades acumuladas, condición de éxito, siguiente pregunta guía).
+  - `application/GuidedFlowService.ts` — CRUD de flujos (usado por el editor) + motor `evaluateMessage()` llamado desde `BotOrchestrator` en cada mensaje entrante.
+  - `infrastructure/` — `JsonGuidedFlowRepository` (config en `data/guided-flows.json`), `JsonFlowStateRepository` (estado en tiempo de ejecución por chat en `data/guided-flow-state.json`, separado de la config) y el controller Express (`/api/guided-flows`).
+  - El estado activo/entidades acumuladas se guarda como estado propio del módulo (`FlowState`), no dentro de `ConversationContext` de Fase A, para mantener los módulos desacoplados; `BotOrchestrator` es quien conecta ambos.
+  - Cuando hay un flujo activo, su pregunta guía y tono se inyectan en el prompt de Gemini (sección 5) para que la respuesta se oriente hacia el objetivo sin salirse del guion.
+  - **No implementado en esta fase:** el barrido de abandono por silencio (`abandonCondition.silenceHours`) — se evalúa solo en un mensaje entrante, que por definición no es silencio; el barrido periódico real es de Fase D (re-engagement). Tampoco se crea la `Appointment` al cumplir `successCondition`; por ahora solo se emite el evento `flow:success` con la acción configurada (`onSuccess`), a la espera de Fase C.
 
 ### Fase C — Citas
 - Entidad `Appointment` + creación automática al cumplir `successCondition`

@@ -275,6 +275,19 @@ export const botAssignmentApi = {
 };
 
 // ==========================================
+// Guided Flows API (configurable target-topic engine — Fase B)
+// ==========================================
+export const guidedFlowApi = {
+    getAll: () => api.get('/guided-flows'),
+    getById: (id: string) => api.get(`/guided-flows/${id}`),
+    create: (flow: any) => api.post('/guided-flows', flow),
+    update: (id: string, flow: any) => api.put(`/guided-flows/${id}`, flow),
+    toggleActive: (id: string, active: boolean) => api.post(`/guided-flows/${id}/toggle`, { active }),
+    delete: (id: string) => api.delete(`/guided-flows/${id}`),
+    getStateByChat: (jid: string) => api.get(`/guided-flows/state/${encodeURIComponent(jid)}`),
+};
+
+// ==========================================
 // Conversation Context API (per-chat contact profile — Fase A)
 // ==========================================
 export const conversationContextApi = {

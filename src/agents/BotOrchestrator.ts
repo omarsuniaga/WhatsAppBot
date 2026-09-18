@@ -9,6 +9,7 @@ import PendingAlertService, { GeminiAnalysis, ConversationMessage as AlertConver
 import BotAssignmentService from '../server/services/botAssignmentService';
 import LearningService from '../server/services/learningService';
 import MetricsService from '../server/services/metricsService';
+import ConversationContextService, { DetectedIntent } from '../server/services/conversationContextService';
 
 export interface BotConfig {
     version: number;
@@ -65,6 +66,7 @@ export class BotOrchestrator extends EventEmitter {
     private assignmentService: BotAssignmentService;
     private learningService: LearningService;
     private metrics: MetricsService;
+    private contextService: ConversationContextService;
 
     private constructor() {
         super();
@@ -77,6 +79,7 @@ export class BotOrchestrator extends EventEmitter {
         this.assignmentService = BotAssignmentService.getInstance();
         this.learningService = LearningService.getInstance();
         this.metrics = MetricsService.getInstance();
+        this.contextService = ConversationContextService.getInstance();
 
         // Initialize Gemini if API key is available
         if (this.config.geminiApiKey) {
@@ -237,6 +240,10 @@ export class BotOrchestrator extends EventEmitter {
         // Store message in conversation history
         this.addToHistory(validJid, 'user', sanitizedMessage);
 
+        // Update lightweight conversation context (Fase A: docs/SPEC_CONVERSACION_GUIADA.md)
+        const detectedIntent = this.extractIntentWithEntities(sanitizedMessage);
+        this.contextService.recordInboundMessage(validJid, sanitizedName, sanitizedMessage, detectedIntent);
+
         // Track processing time for metrics
         const startTime = Date.now();
 
@@ -302,7 +309,7 @@ export class BotOrchestrator extends EventEmitter {
         // Step 3: Cannot answer - Create escalation alert if enabled
         if (chatConfig.autoEscalate && this.alertService.checkRateLimit(validJid)) {
             const geminiAnalysis: GeminiAnalysis = {
-                intent: this.extractIntent(sanitizedMessage),
+                intent: detectedIntent.label,
                 suggestedTopics: this.qaAgent.getRelatedItems(sanitizedMessage, 3).map(i => i.questions[0]),
                 confidence: qaResult?.confidence || 0,
                 reason: 'No se encontró respuesta con suficiente confianza en la base de conocimiento',
@@ -330,6 +337,7 @@ export class BotOrchestrator extends EventEmitter {
             this.config.stats.noMatches++;
             this.saveConfig();
             this.assignmentService.incrementStats(validJid, 'escalations');
+            this.contextService.markEscalated(validJid);
 
             // Record escalation metric
             this.metrics.escalatedToHuman(validJid, alert.id, alert.priority, geminiAnalysis.intent);
@@ -393,6 +401,48 @@ export class BotOrchestrator extends EventEmitter {
         }
 
         return 'consulta_general';
+    }
+
+    /**
+     * Extract intent plus simple entities (date, event type) from a message.
+     * Fase A of docs/SPEC_CONVERSACION_GUIADA.md: a lightweight, keyword-based
+     * extension of extractIntent() rather than a new Gemini call, so this
+     * runs on every inbound message without extra API cost.
+     */
+    private extractIntentWithEntities(message: string): DetectedIntent {
+        const lowerMessage = message.toLowerCase();
+        const intent = this.extractIntent(message);
+        const entities: Record<string, string> = {};
+
+        // Simple date patterns: dd/mm, dd/mm/yyyy, or "20 de octubre"
+        const numericDateMatch = message.match(/\b(\d{1,2})[/\-](\d{1,2})(?:[/\-](\d{2,4}))?\b/);
+        const monthNames = 'enero|febrero|marzo|abril|mayo|junio|julio|agosto|septiembre|octubre|noviembre|diciembre';
+        const namedDateMatch = lowerMessage.match(new RegExp(`\\b(\\d{1,2})\\s+de\\s+(${monthNames})\\b`));
+        if (numericDateMatch) {
+            entities.fecha = numericDateMatch[0];
+        } else if (namedDateMatch) {
+            entities.fecha = namedDateMatch[0];
+        }
+
+        const eventTypes: Record<string, string[]> = {
+            boda: ['boda', 'casamiento', 'matrimonio'],
+            gala: ['gala', 'cena de gala'],
+            corporativo: ['corporativo', 'empresa', 'conferencia', 'convencion', 'convención'],
+            clase: ['clase', 'clases', 'leccion', 'lección'],
+            evento_institucional: ['comunicado', 'reunion institucional', 'reunión institucional']
+        };
+        for (const [type, keywords] of Object.entries(eventTypes)) {
+            if (keywords.some(kw => lowerMessage.includes(kw))) {
+                entities.tipoEvento = type;
+                break;
+            }
+        }
+
+        return {
+            label: intent,
+            confidence: intent === 'consulta_general' ? 0.3 : 0.6,
+            entities
+        };
     }
 
     /**
@@ -478,6 +528,10 @@ export class BotOrchestrator extends EventEmitter {
         // Limit history size
         if (history.length > this.config.settings.maxHistoryMessages) {
             history.shift();
+        }
+
+        if (role === 'assistant') {
+            this.contextService.recordOutboundMessage(jid, content);
         }
     }
 
@@ -639,6 +693,13 @@ export class BotOrchestrator extends EventEmitter {
      */
     getLearningService(): LearningService {
         return this.learningService;
+    }
+
+    /**
+     * Get Conversation Context Service for per-chat contact profiles
+     */
+    getContextService(): ConversationContextService {
+        return this.contextService;
     }
 
     /**

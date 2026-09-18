@@ -9,7 +9,7 @@ import {
     LayoutDashboard, BookOpen, Ticket, Send, Settings,
     MessageSquare, ArrowLeft, Menu, X, Sun, Moon,
     GraduationCap, Users, DoorOpen, Calendar, BookMarked, Bell, LogOut,
-    ShieldAlert, Workflow
+    ShieldAlert, Workflow, CalendarCheck
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -43,6 +43,7 @@ export const AdminLayout = ({ onBack }: AdminLayoutProps) => {
         { path: '/whatsapp/chats', label: 'Gestión WhatsApp', icon: MessageSquare },
         { path: '/knowledge', label: 'Base de Conocimiento', icon: BookOpen },
         { path: '/guided-flows', label: 'Flujos Guiados', icon: Workflow },
+        { path: '/appointments', label: 'Citas', icon: CalendarCheck },
         { path: '/tickets', label: 'Tickets de Soporte', icon: Ticket },
         { path: '/broadcast', label: 'Difusión Masiva', icon: Send },
         { path: '/settings', label: 'Configuración', icon: Settings },

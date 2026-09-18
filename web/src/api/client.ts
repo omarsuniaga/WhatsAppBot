@@ -288,6 +288,18 @@ export const guidedFlowApi = {
 };
 
 // ==========================================
+// Appointments API (proposed/confirmed appointments — Fase C)
+// ==========================================
+export const appointmentApi = {
+    getAll: () => api.get('/appointments'),
+    getById: (id: string) => api.get(`/appointments/${id}`),
+    getByChat: (jid: string) => api.get(`/appointments/chat/${encodeURIComponent(jid)}`),
+    confirm: (id: string, confirmedBy: string) => api.post(`/appointments/${id}/confirm`, { confirmedBy }),
+    cancel: (id: string, notes?: string) => api.post(`/appointments/${id}/cancel`, { notes }),
+    reschedule: (id: string, newDate: string) => api.post(`/appointments/${id}/reschedule`, { newDate }),
+};
+
+// ==========================================
 // Conversation Context API (per-chat contact profile — Fase A)
 // ==========================================
 export const conversationContextApi = {

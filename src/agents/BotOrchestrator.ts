@@ -9,7 +9,7 @@ import PendingAlertService, { GeminiAnalysis, ConversationMessage as AlertConver
 import BotAssignmentService from '../server/services/botAssignmentService';
 import LearningService from '../server/services/learningService';
 import MetricsService from '../server/services/metricsService';
-import ConversationContextService, { DetectedIntent } from '../server/services/conversationContextService';
+import ConversationContextService, { DetectedIntent } from '../modules/conversation-context/application/ConversationContextService';
 
 export interface BotConfig {
     version: number;

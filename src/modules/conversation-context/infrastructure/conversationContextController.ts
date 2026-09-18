@@ -1,12 +1,11 @@
 /**
- * Conversation Context Controller - Handles API routes for per-chat contact
- * profiles (Fase A of docs/SPEC_CONVERSACION_GUIADA.md)
+ * Driving adapter — translates HTTP requests into calls on the
+ * application service. Input validation belongs here (the HTTP boundary),
+ * not in the domain or application layer.
  */
 import { Request, Response } from 'express';
-import { BotOrchestrator } from '../../agents/BotOrchestrator';
-import type { RelationType } from '../services/conversationContextService';
-
-const VALID_RELATION_TYPES: RelationType[] = ['cliente_hotel', 'amigo', 'alumno', 'institucional', 'desconocido'];
+import { BotOrchestrator } from '../../../agents/BotOrchestrator';
+import { isValidRelationType, isValidLanguage } from '../domain/ConversationContext';
 
 export const getAll = async (req: Request, res: Response): Promise<void> => {
     try {
@@ -43,11 +42,11 @@ export const updateProfile = async (req: Request, res: Response): Promise<void> 
         const { jid } = req.params;
         const { displayName, relationType, preferredLanguage, tags } = req.body;
 
-        if (relationType !== undefined && !VALID_RELATION_TYPES.includes(relationType)) {
+        if (relationType !== undefined && !isValidRelationType(relationType)) {
             res.status(400).json({ success: false, error: 'Invalid relationType' });
             return;
         }
-        if (preferredLanguage !== undefined && !['es', 'en'].includes(preferredLanguage)) {
+        if (preferredLanguage !== undefined && !isValidLanguage(preferredLanguage)) {
             res.status(400).json({ success: false, error: 'Invalid preferredLanguage' });
             return;
         }

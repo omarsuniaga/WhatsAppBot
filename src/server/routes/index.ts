@@ -13,7 +13,7 @@ import * as broadcastController from '../controllers/broadcastController';
 import * as alertController from '../controllers/alertController';
 import * as botAssignmentController from '../controllers/botAssignmentController';
 import * as learningController from '../controllers/learningController';
-import * as conversationContextController from '../controllers/conversationContextController';
+import * as conversationContextController from '../../modules/conversation-context/infrastructure/conversationContextController';
 import * as triggerController from '../controllers/triggerController';
 import { checkRateLimit, conditionalRateLimit } from '../middlewares/rateLimitMiddleware';
 import RateLimitService from '../services/rateLimitService';

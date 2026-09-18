@@ -165,12 +165,14 @@ Era la decisión anterior de este mismo ADR (ver Historial de Estados), tomada p
 ## Implementación
 
 ### Plan de Acción
-1. Habilitar Google Calendar API en un proyecto de Google Cloud y generar credenciales (Service Account recomendado para evitar re-autenticación manual periódica).
-2. Agregar `GOOGLE_CALENDAR_CREDENTIALS` (o ruta al JSON de la Service Account) y `GOOGLE_CALENDAR_ID` como variables de entorno — nunca hardcodeadas.
-3. Extender `domain/Appointment.ts` con un campo opcional `googleEventId?: string` (no rompe nada existente; el JSON de citas ya guardadas simplemente no lo tendrá hasta que se sincronicen).
-4. Crear `src/modules/appointments/infrastructure/GoogleCalendarSync.ts`, que se suscribe a `AppointmentService` (`on('appointment:confirmed', ...)`, etc.) y llama a la API de Google Calendar.
-5. Wirear el listener en el mismo lugar donde se inicializan los demás servicios (`src/server/index.ts`), igual que `ReEngagementService.start()` en Fase D.
-6. Manejar errores de forma que nunca interrumpan el flujo de confirmación/cancelación/reagendado desde el dashboard — solo logging.
+1. Habilitar Google Calendar API en un proyecto de Google Cloud y generar credenciales (Service Account recomendado para evitar re-autenticación manual periódica). **Pendiente — tarea del operador, no de código.**
+2. Guardar el JSON de la Service Account en `secrets/google-calendar-sa.json` (ruta ignorada por git, ver `.gitignore`) y compartir el calendario correspondiente con el email de esa cuenta de servicio. **Pendiente — tarea del operador.**
+3. ~~Extender `domain/Appointment.ts` con un campo opcional `googleEventId?: string`~~ — hecho.
+4. ~~Crear `src/modules/appointments/infrastructure/GoogleCalendarSync.ts`~~ — hecho: escucha `appointment:confirmed`/`rescheduled`/`cancelled` en `AppointmentService` y llama a la Calendar API vía `googleapis`.
+5. ~~Wirear el listener en `src/server/index.ts`~~ — hecho, vía `initGoogleCalendarSync()` (no-op si `GOOGLE_CALENDAR_ENABLED` no es `true`).
+6. ~~Manejar errores sin bloquear el flujo del dashboard~~ — hecho: toda llamada a la API es best-effort, solo logging (`GoogleCalendarSync` nunca lanza hacia `AppointmentService`).
+
+Para activar: copiar `.env.example`, poner `GOOGLE_CALENDAR_ENABLED=true`, completar `GOOGLE_CALENDAR_CREDENTIALS_PATH` y `GOOGLE_CALENDAR_ID`, y reiniciar el servidor.
 
 ### Estimación
 | Fase | Tiempo estimado |
@@ -226,6 +228,7 @@ Si `GOOGLE_CALENDAR_ENABLED` no está en `true`, el listener no se registra — 
 |-------|--------|-------|-------|
 | 2026-09-18 | Propuesto | Claude Code | Versión inicial — pendiente de confirmar con el operador si usa Google Calendar |
 | 2026-09-18 | Aceptado | Claude Code (a pedido del operador) | Operador confirmó uso activo de Google Calendar; se cambia la decisión a integrar de forma uni-direccional |
+| 2026-09-18 | Aceptado (implementado, pendiente de credenciales) | Claude Code | `GoogleCalendarSync.ts` implementado y wireado en `src/server/index.ts`, `googleEventId` agregado a `Appointment`. Sigue sin efecto mientras `GOOGLE_CALENDAR_ENABLED` no esté en `true` y no exista un Service Account real en `GOOGLE_CALENDAR_CREDENTIALS_PATH` — los criterios de éxito de esta sección quedan pendientes de validar con credenciales reales, no de código |
 
 ---
 

@@ -14,6 +14,9 @@ google-services.json
 .env.*
 !.env.example
 
+# Google Calendar service account credentials (ADR-002)
+secrets/
+
 # Coverage & testing
 coverage/
 

@@ -8,7 +8,8 @@ import {
     createProposedAppointment,
     confirmAppointment,
     cancelAppointment,
-    rescheduleAppointment
+    rescheduleAppointment,
+    setGoogleEventId
 } from '../domain/Appointment';
 import { AppointmentRepository } from '../domain/ports';
 import { JsonAppointmentRepository } from '../infrastructure/JsonAppointmentRepository';
@@ -86,6 +87,20 @@ class AppointmentService extends EventEmitter {
         rescheduleAppointment(appointment, newDate);
         this.repository.save(appointment);
         this.emit('appointment:rescheduled', appointment);
+        return appointment;
+    }
+
+    /**
+     * Records the Google Calendar event id after a successful sync (ADR-002).
+     * Called only by GoogleCalendarSync — never emits a domain event, since
+     * this is bookkeeping, not a business state change.
+     */
+    setGoogleEventId(id: string, googleEventId: string | undefined): Appointment | null {
+        const appointment = this.repository.findById(id);
+        if (!appointment) return null;
+
+        setGoogleEventId(appointment, googleEventId);
+        this.repository.save(appointment);
         return appointment;
     }
 }

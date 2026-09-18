@@ -20,6 +20,13 @@ export interface Appointment {
     updatedAt: string;
     confirmedBy?: string;
     notes?: string;
+    /**
+     * Google Calendar event id, set by the GoogleCalendarSync adapter
+     * (ADR-002) after syncing. Undefined means "not synced" — this field
+     * is purely informational for the domain; it never drives a business
+     * rule (a sync failure must never block confirming/cancelling here).
+     */
+    googleEventId?: string;
 }
 
 const MAX_NOTES_LENGTH = 1000;
@@ -81,6 +88,20 @@ export function cancelAppointment(
     if (notes) {
         appointment.notes = notes.trim().slice(0, MAX_NOTES_LENGTH);
     }
+    appointment.updatedAt = now;
+    return appointment;
+}
+
+/**
+ * Records (or clears) the Google Calendar event id after a sync attempt.
+ * Called only by the GoogleCalendarSync adapter — never changes `status`.
+ */
+export function setGoogleEventId(
+    appointment: Appointment,
+    googleEventId: string | undefined,
+    now: string = new Date().toISOString()
+): Appointment {
+    appointment.googleEventId = googleEventId;
     appointment.updatedAt = now;
     return appointment;
 }

@@ -9,6 +9,7 @@ import BotService from './services/botService';
 import { initializePersistence } from './persistence';
 import { initializeRepositories } from '../../backend/src/repos';
 import ReEngagementService from '../modules/re-engagement/application/ReEngagementService';
+import { initGoogleCalendarSync } from '../modules/appointments/infrastructure/GoogleCalendarSync';
 
 const app = express();
 const httpServer = createServer(app);
@@ -130,6 +131,10 @@ botService.initialize({
 // Start the re-engagement silence sweep (Fase D: docs/SPEC_CONVERSACION_GUIADA.md)
 // Only queues suggestions for human approval — never sends anything itself.
 ReEngagementService.getInstance().start();
+
+// Sync confirmed/cancelled/rescheduled appointments to Google Calendar
+// (ADR-002). No-op unless GOOGLE_CALENDAR_ENABLED=true.
+initGoogleCalendarSync();
 
 httpServer.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);

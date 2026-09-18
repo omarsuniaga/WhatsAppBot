@@ -19,4 +19,5 @@ export { RoomsPage } from './RoomsPage';
 export { FirestoreDiagnosticPage } from './FirestoreDiagnosticPage';
 export { ConflictResolutionPage } from './ConflictResolutionPage';
 export { GuidedFlowsPage } from './GuidedFlowsPage';
+export { AppointmentsPage } from './AppointmentsPage';
 export * from './whatsapp';

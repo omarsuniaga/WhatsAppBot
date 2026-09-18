@@ -32,7 +32,8 @@ import {
   AttendanceAlertsPage,
   FirestoreDiagnosticPage,
   ConflictResolutionPage,
-  GuidedFlowsPage
+  GuidedFlowsPage,
+  AppointmentsPage
 } from './pages'
 import { aiApi } from './api/client'
 
@@ -107,6 +108,7 @@ function App() {
           <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/kb" element={<KnowledgeBasePage />} />
           <Route path="/guided-flows" element={<GuidedFlowsPage />} />
+          <Route path="/appointments" element={<AppointmentsPage />} />
           <Route path="/tickets" element={<TicketsPage />} />
           <Route path="/broadcast" element={<BroadcastPage />} />
           <Route path="/settings" element={<SettingsPage />} />

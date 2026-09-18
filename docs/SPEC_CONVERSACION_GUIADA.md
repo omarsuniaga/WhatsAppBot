@@ -236,6 +236,12 @@ Diseñado para migrar limpio a tablas relacionales (`conversation_context`, `gui
 ### Fase C — Citas
 - Entidad `Appointment` + creación automática al cumplir `successCondition`
 - Vista de citas propuestas/confirmadas en el dashboard
+- **Implementada** como módulo hexagonal en `src/modules/appointments/`, mismo patrón de Fases A y B:
+  - `domain/Appointment.ts` — entidad y transiciones puras (`createProposedAppointment`, `confirmAppointment`, `cancelAppointment`, `rescheduleAppointment`); toda cita nace en estado `propuesta`, nunca `confirmada`.
+  - `application/AppointmentService.ts` — `createFromFlowSuccess()` (llamado desde `BotOrchestrator` cuando `GuidedFlowService` emite `flow:success` con `onSuccessAction === 'crear_cita_propuesta'`, usando `tipoEvento`/`fecha` de las entidades acumuladas del flujo) + `confirm`/`cancel`/`reschedule` para uso exclusivo del dashboard.
+  - `infrastructure/` — `JsonAppointmentRepository` (`data/appointments.json`) y el controller Express (`/api/appointments`).
+  - Página de dashboard **Citas** (`/appointments`) con filtro por estado y acciones de confirmar/cancelar/reagendar — siempre humanas; el bot nunca llama a `confirm()`.
+  - Otros valores de `onSuccessAction` distintos de `crear_cita_propuesta` no tienen manejador todavía (se loguean); el spec deja `onSuccess` como string libre a propósito para futuras acciones.
 
 ### Fase D — Re-engagement
 - Job de detección de silencio + cola de sugerencias (extensión de `pending-alerts.json`)

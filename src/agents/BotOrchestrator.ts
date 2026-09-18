@@ -11,6 +11,7 @@ import LearningService from '../server/services/learningService';
 import MetricsService from '../server/services/metricsService';
 import ConversationContextService, { DetectedIntent } from '../modules/conversation-context/application/ConversationContextService';
 import GuidedFlowService, { FlowEvaluationResult } from '../modules/guided-flows/application/GuidedFlowService';
+import AppointmentService from '../modules/appointments/application/AppointmentService';
 
 export interface BotConfig {
     version: number;
@@ -69,6 +70,7 @@ export class BotOrchestrator extends EventEmitter {
     private metrics: MetricsService;
     private contextService: ConversationContextService;
     private guidedFlowService: GuidedFlowService;
+    private appointmentService: AppointmentService;
 
     private constructor() {
         super();
@@ -83,6 +85,7 @@ export class BotOrchestrator extends EventEmitter {
         this.metrics = MetricsService.getInstance();
         this.contextService = ConversationContextService.getInstance();
         this.guidedFlowService = GuidedFlowService.getInstance();
+        this.appointmentService = AppointmentService.getInstance();
 
         // Initialize Gemini if API key is available
         if (this.config.geminiApiKey) {
@@ -250,10 +253,21 @@ export class BotOrchestrator extends EventEmitter {
         // Evaluate configurable guided flows (Fase B: docs/SPEC_CONVERSACION_GUIADA.md section 5)
         const relationType = conversationContext?.contactProfile.relationType || 'desconocido';
         const flowResult = this.guidedFlowService.evaluateMessage(validJid, relationType, detectedIntent);
-        if (flowResult.event === 'success' && flowResult.onSuccessAction) {
-            // Fase C will turn this into an actual Appointment; for now we
-            // just surface the signal so it is visible/testable end to end.
-            console.log(`[BotOrchestrator] Guided flow "${flowResult.flow?.id}" succeeded for ${validJid}: ${flowResult.onSuccessAction}`);
+        if (flowResult.event === 'success' && flowResult.flow && flowResult.state) {
+            // Fase C: docs/SPEC_CONVERSACION_GUIADA.md section 6 — the flow
+            // only ever proposes an appointment; a human confirms it later
+            // from the dashboard (AppointmentService.confirm never runs here).
+            if (flowResult.onSuccessAction === 'crear_cita_propuesta') {
+                const appointment = this.appointmentService.createFromFlowSuccess(
+                    validJid,
+                    conversationContext?.contactProfile.displayName || sanitizedName,
+                    flowResult.state.accumulatedEntities,
+                    flowResult.flow.id
+                );
+                console.log(`[BotOrchestrator] Appointment ${appointment.id} proposed for ${validJid} from flow "${flowResult.flow.id}"`);
+            } else {
+                console.log(`[BotOrchestrator] Guided flow "${flowResult.flow.id}" succeeded for ${validJid}: ${flowResult.onSuccessAction} (no handler yet)`);
+            }
         }
 
         // Track processing time for metrics
@@ -730,6 +744,13 @@ export class BotOrchestrator extends EventEmitter {
      */
     getGuidedFlowService(): GuidedFlowService {
         return this.guidedFlowService;
+    }
+
+    /**
+     * Get Appointment Service for managing proposed/confirmed appointments
+     */
+    getAppointmentService(): AppointmentService {
+        return this.appointmentService;
     }
 
     /**

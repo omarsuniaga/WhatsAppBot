@@ -10,6 +10,7 @@ import BotAssignmentService from '../server/services/botAssignmentService';
 import LearningService from '../server/services/learningService';
 import MetricsService from '../server/services/metricsService';
 import ConversationContextService, { DetectedIntent } from '../modules/conversation-context/application/ConversationContextService';
+import GuidedFlowService, { FlowEvaluationResult } from '../modules/guided-flows/application/GuidedFlowService';
 
 export interface BotConfig {
     version: number;
@@ -67,6 +68,7 @@ export class BotOrchestrator extends EventEmitter {
     private learningService: LearningService;
     private metrics: MetricsService;
     private contextService: ConversationContextService;
+    private guidedFlowService: GuidedFlowService;
 
     private constructor() {
         super();
@@ -80,6 +82,7 @@ export class BotOrchestrator extends EventEmitter {
         this.learningService = LearningService.getInstance();
         this.metrics = MetricsService.getInstance();
         this.contextService = ConversationContextService.getInstance();
+        this.guidedFlowService = GuidedFlowService.getInstance();
 
         // Initialize Gemini if API key is available
         if (this.config.geminiApiKey) {
@@ -242,7 +245,16 @@ export class BotOrchestrator extends EventEmitter {
 
         // Update lightweight conversation context (Fase A: docs/SPEC_CONVERSACION_GUIADA.md)
         const detectedIntent = this.extractIntentWithEntities(sanitizedMessage);
-        this.contextService.recordInboundMessage(validJid, sanitizedName, sanitizedMessage, detectedIntent);
+        const conversationContext = this.contextService.recordInboundMessage(validJid, sanitizedName, sanitizedMessage, detectedIntent);
+
+        // Evaluate configurable guided flows (Fase B: docs/SPEC_CONVERSACION_GUIADA.md section 5)
+        const relationType = conversationContext?.contactProfile.relationType || 'desconocido';
+        const flowResult = this.guidedFlowService.evaluateMessage(validJid, relationType, detectedIntent);
+        if (flowResult.event === 'success' && flowResult.onSuccessAction) {
+            // Fase C will turn this into an actual Appointment; for now we
+            // just surface the signal so it is visible/testable end to end.
+            console.log(`[BotOrchestrator] Guided flow "${flowResult.flow?.id}" succeeded for ${validJid}: ${flowResult.onSuccessAction}`);
+        }
 
         // Track processing time for metrics
         const startTime = Date.now();
@@ -278,7 +290,7 @@ export class BotOrchestrator extends EventEmitter {
         // Step 2: Try Gemini if enabled and available
         if (this.config.settings.useGeminiFallback && this.geminiAgent) {
             try {
-                const context = this.buildGeminiContext(validJid, sanitizedMessage);
+                const context = this.buildGeminiContext(validJid, sanitizedMessage, flowResult);
                 const aiResponse = await this.geminiAgent.generateResponse(sanitizedMessage, context);
 
                 if (aiResponse.text) {
@@ -476,7 +488,7 @@ export class BotOrchestrator extends EventEmitter {
     /**
      * Build context for Gemini including business info and related Q&A
      */
-    private buildGeminiContext(jid: string, query: string): string {
+    private buildGeminiContext(jid: string, query: string, flowResult?: FlowEvaluationResult): string {
         const parts: string[] = [];
 
         // Add business context
@@ -485,6 +497,17 @@ export class BotOrchestrator extends EventEmitter {
             parts.push(`Negocio: ${business.name}`);
             parts.push(`Descripcion: ${business.description}`);
             parts.push(`Tono de respuesta: ${business.tone}`);
+            parts.push('');
+        }
+
+        // Guided flow in progress (Fase B): steer the response towards the
+        // configured target topic instead of answering generically.
+        if (flowResult && flowResult.flow && (flowResult.event === 'started' || flowResult.event === 'continued')) {
+            parts.push(`Estás guiando esta conversación hacia: ${flowResult.flow.label}`);
+            parts.push(`Tono a usar: ${flowResult.flow.tone}`);
+            if (flowResult.nextGuidingQuestion) {
+                parts.push(`Después de responder, intenta preguntar (de forma natural, no textual): ${flowResult.nextGuidingQuestion}`);
+            }
             parts.push('');
         }
 
@@ -700,6 +723,13 @@ export class BotOrchestrator extends EventEmitter {
      */
     getContextService(): ConversationContextService {
         return this.contextService;
+    }
+
+    /**
+     * Get Guided Flow Service for managing configurable target-topic flows
+     */
+    getGuidedFlowService(): GuidedFlowService {
+        return this.guidedFlowService;
     }
 
     /**

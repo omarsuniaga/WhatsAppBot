@@ -14,6 +14,7 @@ import * as alertController from '../controllers/alertController';
 import * as botAssignmentController from '../controllers/botAssignmentController';
 import * as learningController from '../controllers/learningController';
 import * as conversationContextController from '../../modules/conversation-context/infrastructure/conversationContextController';
+import * as guidedFlowController from '../../modules/guided-flows/infrastructure/guidedFlowController';
 import * as triggerController from '../controllers/triggerController';
 import { checkRateLimit, conditionalRateLimit } from '../middlewares/rateLimitMiddleware';
 import RateLimitService from '../services/rateLimitService';
@@ -327,6 +328,17 @@ router.get('/conversation-context', conversationContextController.getAll);
 router.get('/conversation-context/:jid', conversationContextController.getByChat);
 router.put('/conversation-context/:jid/profile', conversationContextController.updateProfile);
 router.put('/conversation-context/:jid/opt-out', conversationContextController.setOptedOut);
+
+// ==========================================
+// Guided Flows routes (configurable target-topic engine — Fase B)
+// ==========================================
+router.get('/guided-flows', guidedFlowController.getAll);
+router.get('/guided-flows/:id', guidedFlowController.getById);
+router.post('/guided-flows', guidedFlowController.create);
+router.put('/guided-flows/:id', guidedFlowController.update);
+router.post('/guided-flows/:id/toggle', guidedFlowController.toggleActive);
+router.delete('/guided-flows/:id', guidedFlowController.remove);
+router.get('/guided-flows/state/:jid', guidedFlowController.getStateByChat);
 
 // ==========================================
 // Learning routes (AI Learning from responses)

@@ -31,7 +31,8 @@ import {
   RoomsPage,
   AttendanceAlertsPage,
   FirestoreDiagnosticPage,
-  ConflictResolutionPage
+  ConflictResolutionPage,
+  GuidedFlowsPage
 } from './pages'
 import { aiApi } from './api/client'
 
@@ -105,6 +106,7 @@ function App() {
           {/* Admin Panels - No requieren WhatsApp */}
           <Route path="/knowledge" element={<KnowledgePage />} />
           <Route path="/kb" element={<KnowledgeBasePage />} />
+          <Route path="/guided-flows" element={<GuidedFlowsPage />} />
           <Route path="/tickets" element={<TicketsPage />} />
           <Route path="/broadcast" element={<BroadcastPage />} />
           <Route path="/settings" element={<SettingsPage />} />

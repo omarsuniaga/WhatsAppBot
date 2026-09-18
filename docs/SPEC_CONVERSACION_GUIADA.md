@@ -257,6 +257,9 @@ Diseñado para migrar limpio a tablas relacionales (`conversation_context`, `gui
 ### Fase E — Evaluación de integraciones externas
 - ADR sobre WhatsApp Business Cloud API vs Baileys si el volumen lo justifica
 - ADR sobre integración de calendario externo
+- **Implementada** como dos ADRs en estado "Propuesto" (pendientes de aceptación por el propietario del sistema, no por el agente):
+  - [`docs/adrs/ADR-001-baileys-vs-whatsapp-business-cloud-api.md`](./adrs/ADR-001-baileys-vs-whatsapp-business-cloud-api.md) — decisión propuesta: **mantener Baileys** por ahora (el volumen actual y las mitigaciones ya presentes en Fases A–D —rate limiting, aprobación humana obligatoria, límite semanal de seguimientos— no justifican el costo/rediseño de migrar a la API oficial), con criterios explícitos de cuándo reevaluar.
+  - [`docs/adrs/ADR-002-integracion-calendario-externo.md`](./adrs/ADR-002-integracion-calendario-externo.md) — decisión propuesta: **no integrar calendario externo todavía**; falta confirmar con el operador si usa Google Calendar activamente. `AppointmentService` (Fase C) ya emite los eventos (`appointment:confirmed`, etc.) necesarios para agregar un adaptador después sin rediseño.
 
 ---
 

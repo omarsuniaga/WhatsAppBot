@@ -8,6 +8,7 @@ import routes from './routes';
 import BotService from './services/botService';
 import { initializePersistence } from './persistence';
 import { initializeRepositories } from '../../backend/src/repos';
+import ReEngagementService from '../modules/re-engagement/application/ReEngagementService';
 
 const app = express();
 const httpServer = createServer(app);
@@ -125,6 +126,10 @@ botService.initialize({
     usePairingCode: false,
     debug: DEBUG
 }).catch(err => console.error('Error initializing bot service:', err));
+
+// Start the re-engagement silence sweep (Fase D: docs/SPEC_CONVERSACION_GUIADA.md)
+// Only queues suggestions for human approval — never sends anything itself.
+ReEngagementService.getInstance().start();
 
 httpServer.listen(PORT, () => {
     console.log(`Server running on http://localhost:${PORT}`);

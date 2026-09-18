@@ -9,5 +9,6 @@ export interface GuidedFlowRepository {
 
 export interface FlowStateRepository {
     findByChat(chatJid: string): FlowState | null;
+    findAll(): FlowState[];
     save(state: FlowState): void;
 }

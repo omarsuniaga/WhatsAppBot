@@ -20,4 +20,5 @@ export { FirestoreDiagnosticPage } from './FirestoreDiagnosticPage';
 export { ConflictResolutionPage } from './ConflictResolutionPage';
 export { GuidedFlowsPage } from './GuidedFlowsPage';
 export { AppointmentsPage } from './AppointmentsPage';
+export { FollowUpsPage } from './FollowUpsPage';
 export * from './whatsapp';

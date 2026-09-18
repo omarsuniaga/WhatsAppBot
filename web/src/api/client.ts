@@ -300,6 +300,18 @@ export const appointmentApi = {
 };
 
 // ==========================================
+// Re-engagement API (follow-up suggestion queue — Fase D)
+// ==========================================
+export const followUpApi = {
+    getAll: (status?: 'pending' | 'all') => api.get('/follow-ups', { params: { status } }),
+    approve: (id: string, message?: string, respondedBy?: string) =>
+        api.post(`/follow-ups/${id}/approve`, { message, respondedBy }),
+    discard: (id: string, reason?: string, respondedBy?: string) =>
+        api.post(`/follow-ups/${id}/discard`, { reason, respondedBy }),
+    runSweep: () => api.post('/follow-ups/sweep'),
+};
+
+// ==========================================
 // Conversation Context API (per-chat contact profile — Fase A)
 // ==========================================
 export const conversationContextApi = {

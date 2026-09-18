@@ -275,6 +275,22 @@ export const botAssignmentApi = {
 };
 
 // ==========================================
+// Conversation Context API (per-chat contact profile — Fase A)
+// ==========================================
+export const conversationContextApi = {
+    getAll: () => api.get('/conversation-context'),
+    getByChat: (jid: string) => api.get(`/conversation-context/${encodeURIComponent(jid)}`),
+    updateProfile: (jid: string, profile: {
+        displayName?: string;
+        relationType?: string;
+        preferredLanguage?: string;
+        tags?: string[];
+    }) => api.put(`/conversation-context/${encodeURIComponent(jid)}/profile`, profile),
+    setOptedOut: (jid: string, optedOut: boolean) =>
+        api.put(`/conversation-context/${encodeURIComponent(jid)}/opt-out`, { optedOut }),
+};
+
+// ==========================================
 // Learning API (AI Learning)
 // ==========================================
 export const learningApi = {

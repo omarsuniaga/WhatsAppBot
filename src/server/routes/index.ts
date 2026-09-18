@@ -13,6 +13,7 @@ import * as broadcastController from '../controllers/broadcastController';
 import * as alertController from '../controllers/alertController';
 import * as botAssignmentController from '../controllers/botAssignmentController';
 import * as learningController from '../controllers/learningController';
+import * as conversationContextController from '../../modules/conversation-context/infrastructure/conversationContextController';
 import * as triggerController from '../controllers/triggerController';
 import { checkRateLimit, conditionalRateLimit } from '../middlewares/rateLimitMiddleware';
 import RateLimitService from '../services/rateLimitService';
@@ -318,6 +319,14 @@ router.put('/bot-assignments/default', botAssignmentController.updateDefaultConf
 router.put('/bot-assignments/:jid', botAssignmentController.update);
 router.post('/bot-assignments/:jid/toggle', botAssignmentController.toggleBot);
 router.delete('/bot-assignments/:jid', botAssignmentController.deleteAssignment);
+
+// ==========================================
+// Conversation Context routes (per-chat contact profile — Fase A)
+// ==========================================
+router.get('/conversation-context', conversationContextController.getAll);
+router.get('/conversation-context/:jid', conversationContextController.getByChat);
+router.put('/conversation-context/:jid/profile', conversationContextController.updateProfile);
+router.put('/conversation-context/:jid/opt-out', conversationContextController.setOptedOut);
 
 // ==========================================
 // Learning routes (AI Learning from responses)

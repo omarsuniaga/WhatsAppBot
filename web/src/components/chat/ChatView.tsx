@@ -5,10 +5,11 @@ import { MessageBubble } from './MessageBubble';
 import { MessageInput } from './MessageInput';
 import { chatApi } from '../../api/client';
 import { LoadingSpinner } from '../common/LoadingSpinner';
-import { User, Users, Bot, BotOff, ArrowLeft, Search, MoreVertical, ChevronDown, Settings, X, ChevronUp } from 'lucide-react';
+import { User, Users, Bot, BotOff, ArrowLeft, Search, MoreVertical, ChevronDown, Settings, X, ChevronUp, UserCircle } from 'lucide-react';
 import { SettingsModal } from '../settings/SettingsModal';
 import { BotAssignmentPanel } from '../bot';
 import { ChatSettingsModal } from './ChatSettingsModal';
+import { ContactProfilePanel } from './ContactProfilePanel';
 import type { Chat, Message } from '../../types';
 import { getChatTitle, isGroupChat } from '../../utils/chatTitle';
 
@@ -58,6 +59,9 @@ export const ChatView = ({ onBack, showBackButton }: ChatViewProps) => {
     
     // Per-chat settings modal
     const [showChatSettings, setShowChatSettings] = useState(false);
+
+    // Contact profile panel (Fase A: docs/SPEC_CONVERSACION_GUIADA.md)
+    const [showContactProfile, setShowContactProfile] = useState(false);
     
     const isNearBottomRef = useRef<boolean>(true);
     const initialUnreadCountRef = useRef<number>(0);
@@ -478,6 +482,15 @@ export const ChatView = ({ onBack, showBackButton }: ChatViewProps) => {
                         {isBotActive ? <Bot className="w-5 h-5" /> : <BotOff className="w-5 h-5" />}
                     </button>
 
+                    {/* Contact profile (Fase A: conversación guiada) */}
+                    <button
+                        onClick={() => setShowContactProfile(true)}
+                        title="Perfil de contacto"
+                        className="p-2 text-gray-500 dark:text-[#aebac1] hover:bg-gray-200 dark:hover:bg-[#374248] rounded-full transition-colors"
+                    >
+                        <UserCircle className="w-5 h-5" />
+                    </button>
+
                     {/* Chat settings */}
                     <button
                         onClick={() => setShowChatSettings(true)}
@@ -486,7 +499,7 @@ export const ChatView = ({ onBack, showBackButton }: ChatViewProps) => {
                     >
                         <Settings className="w-5 h-5" />
                     </button>
-                    
+
                     {/* Search in chat */}
                     <button 
                         onClick={handleSearchToggle}
@@ -671,6 +684,14 @@ export const ChatView = ({ onBack, showBackButton }: ChatViewProps) => {
             <ChatSettingsModal
                 isOpen={showChatSettings}
                 onClose={() => setShowChatSettings(false)}
+                chatJid={activeChat}
+                chatName={chatName}
+            />
+
+            {/* Contact Profile Panel (Fase A: docs/SPEC_CONVERSACION_GUIADA.md) */}
+            <ContactProfilePanel
+                isOpen={showContactProfile}
+                onClose={() => setShowContactProfile(false)}
                 chatJid={activeChat}
                 chatName={chatName}
             />

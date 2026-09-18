@@ -219,6 +219,7 @@ Diseñado para migrar limpio a tablas relacionales (`conversation_context`, `gui
 - `ConversationContext` con perfil de contacto y resumen
 - Detección de intención (extensión del análisis Gemini ya usado en `PendingAlertService`)
 - Dashboard: vista de perfil de contacto por chat
+- **Implementada como módulo hexagonal** en `src/modules/conversation-context/` (`domain/` lógica pura, `application/` casos de uso sobre un puerto de repositorio, `infrastructure/` adaptadores JSON y Express) — ver decisión en la sección 15. El resto del proyecto sigue con la arquitectura de servicios/singleton existente; esta convención no se impone todavía al resto del código.
 
 ### Fase B — Flujos guiados
 - Motor de `GuidedFlow` (lectura de config JSON)
@@ -257,3 +258,27 @@ Diseñado para migrar limpio a tablas relacionales (`conversation_context`, `gui
 1. Revisar esta spec con el equipo (o el propio coordinador) y priorizar fases.
 2. Escribir ADR para la decisión de Fase E (Baileys vs API oficial) antes de construir re-engagement a escala.
 3. Iniciar Fase A como PR independiente, sin tocar el flujo de Q&A/escalación existente.
+
+---
+
+## 15. Decisión: arquitectura hexagonal para este módulo
+
+**Estado:** Adoptada para Fase A. Alcance: solo `src/modules/conversation-context/`; el resto del proyecto (`BotOrchestrator`, `PendingAlertService`, `BotAssignmentService`, etc.) sigue con el patrón de servicios/singleton existente y no se migra en esta fase.
+
+**Motivación:** este módulo introduce reglas de negocio nuevas (evolución del perfil de contacto, política de resumen acotado, opt-out permanente) que conviene poder probar sin `fs` ni Express, y que probablemente crecerán en las Fases B–D (flujos guiados, citas, re-engagement). Aislar el dominio detrás de un puerto de repositorio permite, más adelante, cambiar de JSON a una base de datos (sección 9) sin tocar la lógica de negocio ni los llamadores.
+
+**Estructura:**
+```
+src/modules/conversation-context/
+  domain/
+    ConversationContext.ts   # entidad + funciones puras (createContext, recordInbound, updateProfile, ...)
+    ports.ts                 # ConversationContextRepository (puerto de salida)
+  application/
+    ConversationContextService.ts  # casos de uso; único punto de entrada para los adaptadores conductores
+  infrastructure/
+    JsonConversationContextRepository.ts  # adaptador conducido (implementa el puerto sobre JSON)
+    conversationContextController.ts      # adaptador conductor (Express); valida input HTTP
+```
+`BotOrchestrator` actúa como otro adaptador conductor (llama a `ConversationContextService.getInstance()` igual que a `PendingAlertService`), sin necesidad de conocer el dominio ni el repositorio.
+
+**No decidido todavía:** si el resto del proyecto migra a este patrón. Se evaluará según cómo funcione en las Fases B–D antes de proponerlo como convención general (requeriría su propio ADR y una migración incremental, no un rewrite).

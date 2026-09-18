@@ -50,6 +50,10 @@ export class JsonFlowStateRepository implements FlowStateRepository {
         return this.data.states[chatJid] || null;
     }
 
+    findAll(): FlowState[] {
+        return Object.values(this.data.states);
+    }
+
     save(state: FlowState): void {
         this.data.states[state.chatJid] = state;
         this.persist();

@@ -117,6 +117,30 @@ export function completeFlowState(state: FlowState, now: string = new Date().toI
     return state;
 }
 
+export function abandonFlowState(state: FlowState, now: string = new Date().toISOString()): FlowState {
+    state.status = 'abandoned';
+    state.updatedAt = now;
+    return state;
+}
+
+/**
+ * Whether an active flow has been silent long enough to count as abandoned
+ * (spec section 7). `lastInboundAt` should come from the chat's
+ * ConversationContext (Fase A), since that is what actually reflects
+ * customer silence — the flow state's own updatedAt does not.
+ */
+export function isAbandoned(
+    flow: GuidedFlow,
+    lastInboundAt: string | null,
+    now: string = new Date().toISOString()
+): boolean {
+    const reference = lastInboundAt ? new Date(lastInboundAt).getTime() : NaN;
+    if (Number.isNaN(reference)) return false;
+
+    const elapsedHours = (new Date(now).getTime() - reference) / (1000 * 60 * 60);
+    return elapsedHours >= flow.abandonCondition.silenceHours;
+}
+
 /**
  * Pick the next guiding question to ask: the first one not yet "answered"
  * (heuristic: one question answered per captured entity so far). This is a

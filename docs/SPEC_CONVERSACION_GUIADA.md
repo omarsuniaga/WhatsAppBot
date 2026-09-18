@@ -247,6 +247,12 @@ Diseñado para migrar limpio a tablas relacionales (`conversation_context`, `gui
 - Job de detección de silencio + cola de sugerencias (extensión de `pending-alerts.json`)
 - Flujo de aprobación humana en el dashboard
 - Rate limiting y respeto de `optedOut`
+- **Implementada** como módulo hexagonal en `src/modules/re-engagement/`, mismo patrón de Fases A–C. Dos desviaciones deliberadas respecto al texto original de esta sección, documentadas aquí:
+  - **Cola propia en vez de extender `pending-alerts.json`**: el esquema de `PendingAlert` exige un análisis de Gemini específico de escalación que no aplica a una sugerencia de seguimiento; extenderlo habría tocado el `PendingAlertService` existente y funcionando. En su lugar, `data/follow-up-suggestions.json` (`JsonFollowUpRepository`) es una cola independiente, visible en el dashboard como una sección propia ("Retomar Conversaciones"), manteniendo el principio de "no romper lo existente".
+  - **Generación del mensaje vía plantilla, no vía Gemini todavía**: `MessageGenerator` es un puerto (`domain/ports.ts`); el adaptador por defecto (`TemplateMessageGenerator`) es determinista y sin llamada a API. Conectar Gemini es un adaptador futuro sin tocar dominio/aplicación — se dejó así para no acoplar este módulo a la composición de `BotOrchestrator`/`GeminiAgent` en esta fase.
+  - `ReEngagementService.sweep()` corre cada hora (`src/server/index.ts`, `ReEngagementService.getInstance().start()`) y solo **encola** sugerencias — nunca envía. Dos casos: (1) flujos guiados activos (Fase B) que superan su propio `abandonCondition.silenceHours` comparado contra `lastInboundAt` del `ConversationContext` (Fase A), y (2) contactos con `relationType` conocido sin flujo activo que llevan ≥48h sin mensaje entrante.
+  - Límite de una sugerencia por chat por semana (`WEEKLY_SUGGESTION_LIMIT`) y respeto permanente de `optedOut`, verificado tanto al generar la sugerencia como otra vez al aprobarla (por si el opt-out se marcó después de encolarla).
+  - Aprobar una sugerencia (`POST /api/follow-ups/:id/approve`, con texto editable) es lo único que dispara un envío real, vía `MessageSender` (adaptador `BotServiceMessageSender` sobre el `BotService` existente, que ya aplica el rate limiting de mensajes).
 
 ### Fase E — Evaluación de integraciones externas
 - ADR sobre WhatsApp Business Cloud API vs Baileys si el volumen lo justifica

@@ -16,6 +16,7 @@ import * as learningController from '../controllers/learningController';
 import * as conversationContextController from '../../modules/conversation-context/infrastructure/conversationContextController';
 import * as guidedFlowController from '../../modules/guided-flows/infrastructure/guidedFlowController';
 import * as appointmentController from '../../modules/appointments/infrastructure/appointmentController';
+import * as followUpController from '../../modules/re-engagement/infrastructure/followUpController';
 import * as triggerController from '../controllers/triggerController';
 import { checkRateLimit, conditionalRateLimit } from '../middlewares/rateLimitMiddleware';
 import RateLimitService from '../services/rateLimitService';
@@ -350,6 +351,14 @@ router.get('/appointments/:id', appointmentController.getById);
 router.post('/appointments/:id/confirm', appointmentController.confirm);
 router.post('/appointments/:id/cancel', appointmentController.cancel);
 router.post('/appointments/:id/reschedule', appointmentController.reschedule);
+
+// ==========================================
+// Re-engagement routes (follow-up suggestion queue — Fase D)
+// ==========================================
+router.get('/follow-ups', followUpController.getAll);
+router.post('/follow-ups/:id/approve', followUpController.approve);
+router.post('/follow-ups/:id/discard', followUpController.discard);
+router.post('/follow-ups/sweep', followUpController.runSweep);
 
 // ==========================================
 // Learning routes (AI Learning from responses)

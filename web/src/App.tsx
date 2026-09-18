@@ -33,7 +33,8 @@ import {
   FirestoreDiagnosticPage,
   ConflictResolutionPage,
   GuidedFlowsPage,
-  AppointmentsPage
+  AppointmentsPage,
+  FollowUpsPage
 } from './pages'
 import { aiApi } from './api/client'
 
@@ -109,6 +110,7 @@ function App() {
           <Route path="/kb" element={<KnowledgeBasePage />} />
           <Route path="/guided-flows" element={<GuidedFlowsPage />} />
           <Route path="/appointments" element={<AppointmentsPage />} />
+          <Route path="/follow-ups" element={<FollowUpsPage />} />
           <Route path="/tickets" element={<TicketsPage />} />
           <Route path="/broadcast" element={<BroadcastPage />} />
           <Route path="/settings" element={<SettingsPage />} />

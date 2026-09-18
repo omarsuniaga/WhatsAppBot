@@ -18,6 +18,7 @@ import {
     isSuccess,
     advanceFlowState,
     completeFlowState,
+    abandonFlowState,
     createFlowState,
     nextGuidingQuestion,
     sanitizeFlowInput,
@@ -175,6 +176,29 @@ class GuidedFlowService extends EventEmitter {
 
     getState(chatJid: string): FlowState | null {
         return this.stateRepository.findByChat(chatJid);
+    }
+
+    /**
+     * All currently-active flow states, for the re-engagement sweep
+     * (Fase D) to check against each flow's abandonCondition.
+     */
+    getActiveStates(): FlowState[] {
+        return this.stateRepository.findAll().filter(s => s.status === 'active');
+    }
+
+    /**
+     * Mark an active flow as abandoned (called by the Fase D sweep once it
+     * has independently verified the chat has been silent long enough —
+     * this service does not read timestamps itself, see domain/isAbandoned).
+     */
+    abandonFlow(chatJid: string): FlowState | null {
+        const state = this.stateRepository.findByChat(chatJid);
+        if (!state || state.status !== 'active') return null;
+
+        abandonFlowState(state);
+        this.stateRepository.save(state);
+        this.emit('flow:abandoned', state);
+        return state;
     }
 }
 

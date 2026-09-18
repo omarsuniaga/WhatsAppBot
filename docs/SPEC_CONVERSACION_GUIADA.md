@@ -259,7 +259,7 @@ Diseñado para migrar limpio a tablas relacionales (`conversation_context`, `gui
 - ADR sobre integración de calendario externo
 - **Implementada** como dos ADRs en estado "Propuesto" (pendientes de aceptación por el propietario del sistema, no por el agente):
   - [`docs/adrs/ADR-001-baileys-vs-whatsapp-business-cloud-api.md`](./adrs/ADR-001-baileys-vs-whatsapp-business-cloud-api.md) — decisión propuesta: **mantener Baileys** por ahora (el volumen actual y las mitigaciones ya presentes en Fases A–D —rate limiting, aprobación humana obligatoria, límite semanal de seguimientos— no justifican el costo/rediseño de migrar a la API oficial), con criterios explícitos de cuándo reevaluar.
-  - [`docs/adrs/ADR-002-integracion-calendario-externo.md`](./adrs/ADR-002-integracion-calendario-externo.md) — decisión propuesta: **no integrar calendario externo todavía**; falta confirmar con el operador si usa Google Calendar activamente. `AppointmentService` (Fase C) ya emite los eventos (`appointment:confirmed`, etc.) necesarios para agregar un adaptador después sin rediseño.
+  - [`docs/adrs/ADR-002-integracion-calendario-externo.md`](./adrs/ADR-002-integracion-calendario-externo.md) — **Aceptado**: el operador confirmó que usa Google Calendar activamente, así que se decidió integrar de forma **uni-direccional** (bot → Google Calendar) al confirmar/cancelar/reagendar una cita, usando los eventos que `AppointmentService` (Fase C) ya emite. No implementado todavía en código — el ADR deja el plan de acción y las variables de entorno (`GOOGLE_CALENDAR_ENABLED`, etc.) listas para cuando se construya.
 
 ---
 

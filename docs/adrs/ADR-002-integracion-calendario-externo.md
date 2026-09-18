@@ -9,10 +9,10 @@
 | Campo | Valor |
 |-------|-------|
 | **ID** | ADR-002 |
-| **Estado** | [x] Propuesto &nbsp;&nbsp;[ ] Aceptado &nbsp;&nbsp;[ ] Deprecated &nbsp;&nbsp;[ ] Superseded |
+| **Estado** | [ ] Propuesto &nbsp;&nbsp;[x] Aceptado &nbsp;&nbsp;[ ] Deprecated &nbsp;&nbsp;[ ] Superseded |
 | **Fecha** | 2026-09-18 |
 | **Autor** | Claude Code (sesión de implementación de `docs/SPEC_CONVERSACION_GUIADA.md`) |
-| **Revisores** | Pendiente — decisión del propietario del sistema |
+| **Revisores** | Propietario del sistema — confirmó el 2026-09-18 que usa Google Calendar activamente |
 | **Supersede** | — |
 | **Relacionado** | ADR-001 (canal de WhatsApp) |
 
@@ -24,17 +24,18 @@
 La Fase C implementó la entidad `Appointment` (`src/modules/appointments/`): cuando un flujo guiado (Fase B) captura `tipoEvento` y `fecha`, se crea una cita en estado `propuesta`, visible en el dashboard (`/appointments`), donde un humano la confirma, cancela o reagenda. Hoy esa cita vive **únicamente** en `data/appointments.json` — no aparece en ningún calendario externo.
 
 ### Problema a Resolver
-El operador coordina actividades musicales en hoteles y, además, tiene responsabilidades administrativas (coordinador del programa orquestal). Es razonable que quiera ver sus citas propuestas/confirmadas junto con el resto de su agenda (ensayos, clases, otros compromisos), no solo dentro del dashboard del bot. Hay que decidir si vale la pena integrar un calendario externo (Google Calendar es el candidato natural, per spec sección 9) y, si es así, con qué alcance.
+El operador coordina actividades musicales en hoteles y, además, tiene responsabilidades administrativas (coordinador del programa orquestal). **Confirmó que usa Google Calendar activamente** para su agenda. Sin integración, cada cita confirmada en el dashboard del bot exige un paso manual adicional (copiarla a Google Calendar) para que aparezca junto al resto de sus compromisos — justo el tipo de fricción que el spec busca reducir (sección 0: ayudar a convertir conversaciones en citas de forma eficiente).
 
 ### Restricciones
-- El operador ya podría estar usando Google Calendar u otro calendario para su actividad musical/institucional — no lo sabemos con certeza, hay que confirmarlo antes de implementar.
-- Cualquier integración de calendario añade una dependencia externa (credenciales OAuth, cuota de API) al proyecto, que hoy no tiene autenticación de usuarios del propio dashboard (ver `CLAUDE.md`: "NO tiene aún: Sistema de autenticación").
-- Una cita de WhatsApp sigue naciendo como *propuesta*, nunca confirmada automáticamente (regla de Fase C) — la integración de calendario no debe cambiar eso.
+- Requiere credenciales OAuth de Google (Service Account o OAuth de usuario) — nunca hardcodeadas, vía variables de entorno (regla de `CLAUDE.md`).
+- El proyecto hoy no tiene sistema de autenticación de usuarios del dashboard (`CLAUDE.md`: "NO tiene aún: Sistema de autenticación"), así que las credenciales de Google Calendar son a nivel de sistema/operador, no por usuario del dashboard.
+- Una cita de WhatsApp sigue naciendo como *propuesta*, nunca confirmada automáticamente (regla de Fase C) — la integración no debe cambiar eso: **solo se crea el evento en Google Calendar cuando la cita pasa a `confirmada`**, nunca antes.
+- Alcance inicial uni-direccional (bot → Google Calendar); sincronización de vuelta queda fuera por ahora (ver "Alternativas Consideradas").
 
 ### Stakeholders Afectados
 | Stakeholder | Impacto |
 |-------------|---------|
-| Operador del sistema | Ganaría visibilidad unificada de su agenda, a cambio de configurar una integración |
+| Operador del sistema | Gana visibilidad unificada de su agenda sin pasos manuales, a cambio de configurar credenciales de Google una vez |
 | Clientes/hoteles con citas propuestas | Ninguno directo — la integración es solo de visibilidad para el operador |
 
 ---
@@ -42,12 +43,18 @@ El operador coordina actividades musicales en hoteles y, además, tiene responsa
 ## Decisión
 
 ### Resumen
-> **No integrar todavía** un calendario externo; mantener `Appointment` solo en el dashboard del bot, y diseñar el modelo de datos (ya hecho en Fase C) de forma que una integración futura sea un adaptador nuevo, no un rediseño.
+> Integrar Google Calendar de forma **uni-direccional** (bot → calendario): al confirmar, cancelar o reagendar una cita en el dashboard, sincronizar automáticamente el evento correspondiente en Google Calendar, sin sincronización de vuelta en esta fase.
 
 ### Descripción Detallada
-Faltan dos datos que deberían confirmarse con el operador antes de construir esto: (1) si realmente usa Google Calendar activamente para su agenda musical/institucional (spec sección 9 lo deja como pregunta abierta), y (2) qué pasaría con la sincronización bidireccional — si una cita se mueve en Google Calendar, ¿debe reflejarse en el dashboard? Implementar la integración sin esas respuestas arriesga construir algo que no se usa o que sincroniza mal.
+`AppointmentService` (Fase C) ya emite los eventos `appointment:confirmed`, `appointment:cancelled` y `appointment:rescheduled` a través de su `EventEmitter`. La integración se implementa como un **adaptador nuevo** que escucha esos eventos y llama a la API de Google Calendar — sin tocar `domain/Appointment.ts` ni la lógica de negocio existente, siguiendo el mismo patrón hexagonal usado en Fases A–D (dominio y aplicación no saben que Google Calendar existe; es un detalle de infraestructura).
 
-La arquitectura ya deja la puerta abierta sin costo: `AppointmentService` (Fase C) es la única fuente de verdad de cambios de estado (`confirm`/`cancel`/`reschedule`), así que agregar una integración de calendario más adelante es tan simple como escuchar sus eventos (`appointment:confirmed`, `appointment:cancelled`, `appointment:rescheduled`, ya emitidos por el `EventEmitter` del servicio) y llamar a la API de Google Calendar desde un nuevo listener/adaptador — sin tocar el dominio de `Appointment` ni el dashboard existente.
+Flujo:
+- `appointment:confirmed` → crear evento en Google Calendar con `contactName`, `type`, `proposedDate` y un enlace de vuelta al chat de WhatsApp en la descripción.
+- `appointment:rescheduled` → actualizar la fecha del evento existente.
+- `appointment:cancelled` → eliminar (o marcar cancelado) el evento.
+- Ninguna otra transición de `Appointment` toca Google Calendar — en particular, **nunca** se crea un evento para una cita en estado `propuesta`, para no ensuciar el calendario del operador con citas que un cliente aún no confirmó.
+
+Se guarda el `googleEventId` devuelto por la API junto al `Appointment` (campo nuevo, opcional) para poder actualizar/eliminar el evento correcto en los pasos siguientes.
 
 ### Diagrama
 ```mermaid
@@ -58,126 +65,158 @@ graph TD
     D -->|Confirmar| E[appointment:confirmed]
     D -->|Reagendar| F[appointment:rescheduled]
     D -->|Cancelar| G[appointment:cancelled]
-    E -.->|Futuro, si se acepta este ADR| H[Adaptador Google Calendar]
-    F -.-> H
-    G -.-> H
+    E --> H[GoogleCalendarSync: crear evento]
+    F --> I[GoogleCalendarSync: actualizar evento]
+    G --> J[GoogleCalendarSync: eliminar evento]
 ```
 
 ---
 
 ## Alternativas Consideradas
 
-### Alternativa 1: Integrar Google Calendar ahora (uni-direccional: bot → calendario)
+### Alternativa 1: Integración uni-direccional (bot → calendario) — elegida
 
 **Descripción:**
-Al confirmar una cita en el dashboard, crear automáticamente un evento en Google Calendar (sin sincronización de vuelta).
+Al confirmar/reagendar/cancelar una cita en el dashboard, reflejar el cambio en Google Calendar. Sin escuchar cambios que el operador haga directamente en Google Calendar.
 
 **Pros:**
-- Visibilidad inmediata de citas confirmadas junto al resto de la agenda del operador
-- Relativamente simple: un solo sentido de sincronización, disparado por `appointment:confirmed`
+- Cubre el caso de uso real confirmado por el operador (ver su agenda unificada)
+- Relativamente simple: un solo sentido, disparado por eventos que `AppointmentService` ya emite
+- No requiere webhooks de Google ni manejo de conflictos de sincronización
 
 **Contras:**
-- Requiere OAuth de Google y manejo de tokens — nueva superficie de configuración y de posibles fallos silenciosos (¿qué pasa si el token expira?)
-- No confirmado que el operador use Google Calendar como su calendario principal
-- Si luego el operador mueve/cancela el evento directamente en Google Calendar, el dashboard no se entera (no hay sincronización de vuelta) — puede generar inconsistencias
+- Si el operador mueve o borra el evento directamente en Google Calendar, el dashboard no se entera — puede quedar desincronizado
+- Requiere manejo de fallos: si la llamada a Google Calendar falla (token expirado, sin conexión), la cita en el dashboard debe seguir siendo la fuente de verdad y no bloquear la confirmación
 
 **Razón de descarte:**
-Falta la confirmación de que este es el calendario correcto y el flujo de uso real; construirlo ahora es especulativo.
+No se descartó — es la decisión. El riesgo de desincronización se acepta porque el dashboard sigue siendo la fuente de verdad para el estado de la cita; Google Calendar es una vista adicional, no un segundo sistema de registro.
 
 ---
 
 ### Alternativa 2: Integración bidireccional completa
 
 **Descripción:**
-Sincronización en ambos sentidos entre `Appointment` y Google Calendar, con webhooks de Google para detectar cambios externos.
+Sincronización en ambos sentidos, con webhooks de Google Calendar para detectar cambios externos y reflejarlos en `Appointment`.
 
 **Pros:**
-- Fuente única de verdad percibida por el operador (puede editar desde cualquier lado)
+- El operador podría editar desde cualquiera de los dos lados sin perder consistencia
 
 **Contras:**
-- Complejidad significativamente mayor (manejo de conflictos, webhooks, reintentos)
-- Ningún caso de uso actual la requiere — es sobre-ingeniería en este momento
+- Complejidad significativamente mayor: webhooks, resolución de conflictos, reintentos, validación de qué cambios son válidos de vuelta (¿puede alguien cambiar el estado de una cita a `confirmada` solo por moverla en Calendar?)
+- Ningún caso de uso actual la requiere todavía
 
 **Razón de descarte:**
-Desproporcionado para el problema actual; ni siquiera la integración simple (Alternativa 1) está confirmada como necesaria todavía.
+Desproporcionado frente al problema real (visibilidad, no edición bidireccional). Se puede reconsiderar como ADR posterior si la Alternativa 1 resulta insuficiente en la práctica.
 
 ---
 
-### Alternativa 3: No integrar (elegida)
+### Alternativa 3: No integrar
 
 **Descripción:**
-Mantener `Appointment` solo en el dashboard, tal como quedó en Fase C.
+Mantener `Appointment` solo en el dashboard, como quedó en Fase C.
 
 **Pros:**
 - Cero complejidad y cero dependencias nuevas
-- El modelo de datos y los eventos de `AppointmentService` ya permiten agregar un adaptador después sin rediseño
 
 **Contras:**
-- El operador debe revisar el dashboard del bot y su calendario personal por separado, mientras no se integre
+- El operador confirmó que sí usa Google Calendar activamente — mantener esto obliga a un paso manual repetido
 
 **Razón de descarte:**
-No se descartó — es la decisión, hasta confirmar la necesidad real con el operador.
+Era la decisión anterior de este mismo ADR (ver Historial de Estados), tomada porque no estaba confirmado el uso real de Google Calendar. Ya se confirmó, así que deja de aplicar.
 
 ---
 
 ## Análisis de Trade-offs
 
-| Aspecto | No integrar (elegida) | Google Calendar uni-direccional | Bidireccional |
-|---------|------------------------|----------------------------------|----------------|
-| Complejidad | Ninguna | Media | Alta |
-| Costo | $0 | $0 (cuota gratuita de Google suele bastar) | $0, pero más superficie de fallo |
-| Tiempo impl. | 0 | ~1-2 días | ~1 semana+ |
-| Dependencia externa nueva | No | Sí (OAuth Google) | Sí (OAuth + webhooks) |
-| Riesgo de inconsistencia | Ninguno | Medio (solo un sentido) | Bajo si está bien implementado, pero más piezas que pueden fallar |
+| Aspecto | Uni-direccional (elegida) | Bidireccional | No integrar |
+|---------|----------------------------|----------------|---------------|
+| Complejidad | Media | Alta | Ninguna |
+| Costo | $0 (cuota gratuita de Google suele bastar) | $0, pero más superficie de fallo | $0 |
+| Tiempo impl. | ~1-2 días | ~1 semana+ | 0 |
+| Dependencia externa nueva | Sí (OAuth Google) | Sí (OAuth + webhooks) | No |
+| Resuelve el problema confirmado | Sí | Sí (sobre-resuelto) | No |
 
 ---
 
 ## Consecuencias
 
 ### Positivas
-- Cero esfuerzo y cero riesgo adicional ahora
-- Camino claro para agregarlo después, sin deuda técnica: los eventos de `AppointmentService` ya existen
+- El operador ve sus citas confirmadas en Google Calendar sin pasos manuales
+- Cambio aislado en infraestructura (`src/modules/appointments/infrastructure/`), sin tocar dominio ni aplicación ya probados en Fase C
+- `googleEventId` guardado junto al `Appointment` permite actualizar/eliminar correctamente sin duplicar eventos
 
 ### Negativas
-- El operador sigue teniendo que mirar dos lugares (dashboard + su calendario) hasta que esto se resuelva
+- Nueva dependencia externa (Google Calendar API) con su propia superficie de fallo (cuota, token expirado, conectividad)
+- Posible desincronización si el operador edita directamente en Google Calendar (aceptado, ver Alternativa 1)
 
 ### Riesgos
 | Riesgo | Probabilidad | Impacto | Mitigación |
 |--------|--------------|---------|------------|
-| El operador de hecho sí necesita esto y no se implementa a tiempo | Media | Bajo–Medio (incomodidad, no pérdida de datos) | Confirmar con el operador en el próximo ciclo de feedback; el ADR queda listo para aprobarse rápido |
+| Fallo al llamar a la API de Google Calendar (token expirado, cuota, red) | Media | Bajo | La confirmación de la cita en el dashboard **nunca** depende de que la sincronización tenga éxito; el fallo se loguea y no bloquea el flujo humano |
+| Token OAuth expira sin renovación automática | Media | Medio | Usar refresh token de larga duración (Service Account u OAuth con `access_type=offline`); alertar en logs si falla la renovación |
+| Evento duplicado por reintentos | Baja | Bajo | Guardar y reutilizar `googleEventId`; solo crear si no existe |
 
 ### Deuda Técnica Introducida
-- [x] Ninguna
+- [ ] Ninguna
+- [x] Riesgo de desincronización si el operador edita directamente en Google Calendar (documentado y aceptado, ver Alternativa 1); se revisita si en la práctica genera confusión.
 
 ---
 
 ## Implementación
 
-No aplica todavía. Si se acepta integrar más adelante (Alternativa 1):
-1. Confirmar con el operador que Google Calendar es el calendario a usar.
-2. Crear un adaptador `infrastructure/GoogleCalendarSync.ts` en `src/modules/appointments/` que escuche `appointment:confirmed`/`appointment:rescheduled`/`appointment:cancelled` desde `AppointmentService` y llame a la API de Google Calendar.
-3. Manejar credenciales OAuth vía variables de entorno, nunca hardcodeadas (regla de `CLAUDE.md`).
-4. No tocar `domain/Appointment.ts` ni `application/AppointmentService.ts` — el punto de extensión son los eventos ya emitidos.
+### Plan de Acción
+1. Habilitar Google Calendar API en un proyecto de Google Cloud y generar credenciales (Service Account recomendado para evitar re-autenticación manual periódica).
+2. Agregar `GOOGLE_CALENDAR_CREDENTIALS` (o ruta al JSON de la Service Account) y `GOOGLE_CALENDAR_ID` como variables de entorno — nunca hardcodeadas.
+3. Extender `domain/Appointment.ts` con un campo opcional `googleEventId?: string` (no rompe nada existente; el JSON de citas ya guardadas simplemente no lo tendrá hasta que se sincronicen).
+4. Crear `src/modules/appointments/infrastructure/GoogleCalendarSync.ts`, que se suscribe a `AppointmentService` (`on('appointment:confirmed', ...)`, etc.) y llama a la API de Google Calendar.
+5. Wirear el listener en el mismo lugar donde se inicializan los demás servicios (`src/server/index.ts`), igual que `ReEngagementService.start()` en Fase D.
+6. Manejar errores de forma que nunca interrumpan el flujo de confirmación/cancelación/reagendado desde el dashboard — solo logging.
+
+### Estimación
+| Fase | Tiempo estimado |
+|------|-----------------|
+| Configuración de credenciales Google | 1-2 horas (depende de si ya existe un proyecto de Google Cloud) |
+| Implementación del adaptador | 3-4 horas |
+| Testing manual end-to-end | 1-2 horas |
+
+### Dependencias
+- Librería oficial `googleapis` (Node.js) para la Calendar API
+- Credenciales de Google Cloud (Service Account con acceso al calendario del operador, compartido explícitamente con esa cuenta de servicio)
+
+### Feature Flags
+```
+GOOGLE_CALENDAR_ENABLED=true
+GOOGLE_CALENDAR_CREDENTIALS_PATH=./secrets/google-calendar-sa.json
+GOOGLE_CALENDAR_ID=primary
+```
+Si `GOOGLE_CALENDAR_ENABLED` no está en `true`, el listener no se registra — el sistema sigue funcionando exactamente igual que hoy (sin sincronización), para no bloquear el resto del sistema si las credenciales aún no están configuradas.
 
 ---
 
 ## Validación
 
 ### Criterios de Éxito
-- [ ] Confirmación explícita del operador sobre si usa o no Google Calendar activamente, antes de implementar cualquier alternativa distinta a "no integrar"
+- [ ] Confirmar una cita en `/appointments` crea el evento correspondiente en el Google Calendar del operador en menos de unos segundos
+- [ ] Cancelar/reagendar una cita ya sincronizada actualiza o elimina el evento correctamente, sin duplicados
+- [ ] Un fallo de la API de Google Calendar no impide confirmar/cancelar/reagendar la cita en el dashboard
 
 ### Métricas a Monitorear
-No aplica mientras no se implemente.
+| Métrica | Valor actual | Valor esperado |
+|---------|--------------|-----------------|
+| Citas confirmadas con `googleEventId` guardado | 0 (no implementado) | 100% de las confirmadas después del despliegue |
+| Errores de sincronización logueados | N/A | Cercano a 0 en operación normal |
 
 ### Rollback Plan
-No aplica.
+1. Poner `GOOGLE_CALENDAR_ENABLED=false` — el sistema vuelve a comportarse exactamente como antes de este ADR, sin tocar `Appointment` ni el dashboard.
+2. Si hace falta revertir el código, el cambio está aislado a `infrastructure/GoogleCalendarSync.ts` y al campo opcional `googleEventId`, sin dependencias cruzadas.
 
 ---
 
 ## Referencias
 
 - `docs/SPEC_CONVERSACION_GUIADA.md`, sección 9 (integraciones a evaluar) y sección 6 (entidad Appointment)
-- `src/modules/appointments/application/AppointmentService.ts` — eventos ya disponibles como punto de extensión
+- `src/modules/appointments/application/AppointmentService.ts` — eventos usados como punto de extensión
+- [Google Calendar API — Node.js quickstart](https://developers.google.com/calendar/api/quickstart/nodejs)
 
 ---
 
@@ -186,6 +225,7 @@ No aplica.
 | Fecha | Estado | Autor | Notas |
 |-------|--------|-------|-------|
 | 2026-09-18 | Propuesto | Claude Code | Versión inicial — pendiente de confirmar con el operador si usa Google Calendar |
+| 2026-09-18 | Aceptado | Claude Code (a pedido del operador) | Operador confirmó uso activo de Google Calendar; se cambia la decisión a integrar de forma uni-direccional |
 
 ---
 
